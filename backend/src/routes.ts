@@ -300,7 +300,8 @@ api.post("/settings/test", wrap(async (_req, res) => {
   // For Gemini, validate the key and model name first — its errors are otherwise cryptic.
   if (cfg.provider === "gemini") {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=50&key=${encodeURIComponent(cfg.apiKey)}`
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=50",
+      { headers: { "x-goog-api-key": cfg.apiKey } }
     );
     const body = await r.text();
     if (!r.ok) {

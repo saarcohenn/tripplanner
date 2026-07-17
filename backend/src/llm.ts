@@ -81,10 +81,11 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
           model
-        )}:generateContent?key=${encodeURIComponent(c.apiKey)}`,
+        )}:generateContent`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          // New-format Gemini keys (AQ.…) only work via this header, not the legacy ?key= param.
+          headers: { "content-type": "application/json", "x-goog-api-key": c.apiKey },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: "user", parts: [{ text: user }] }],
