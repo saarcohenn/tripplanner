@@ -44,6 +44,10 @@ docker compose up -d --build
 
 Data (trips + settings + your API key) lives in the `tripplanner-data` volume.
 
+The Google Maps key can be provided as an environment variable instead of the Settings UI:
+copy `.env.example` to `.env` and set `GOOGLE_MAPS_API_KEY` — docker-compose picks it up
+automatically. A key saved in the Settings UI takes precedence over the env var.
+
 ### Homelab deployment via GHCR
 
 1. Push this repo to GitHub. The included workflow (`.github/workflows/docker.yml`) builds and

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty } from "./db.js";
-import { complete, extractJson, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
+import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
 import { planPrompt, advisorPrompt, importPrompt, TripBundle } from "./prompts.js";
 
 export const api = Router();
@@ -198,9 +198,14 @@ api.post("/import/conversation", wrap(async (req, res) => {
 }));
 
 // ---------- Google Places (English search + photos) ----------
+// The Maps key can come from Settings (DB) or the GOOGLE_MAPS_API_KEY env var (docker-compose).
+function effectiveGmapsKey(): string | null {
+  return getSetting("google_maps_api_key") || process.env.GOOGLE_MAPS_API_KEY || null;
+}
+
 function gmapsKey(): string {
-  const key = getSetting("google_maps_api_key");
-  if (!key) throw Object.assign(new Error("No Google Maps API key configured (Settings)"), { status: 400 });
+  const key = effectiveGmapsKey();
+  if (!key) throw Object.assign(new Error("No Google Maps API key configured (Settings or GOOGLE_MAPS_API_KEY env var)"), { status: 400 });
   return key;
 }
 
@@ -283,7 +288,18 @@ api.get("/settings", wrap((_req, res) => {
   for (const k of SETTING_KEYS) out[k] = getSetting(k);
   // Never leak the full key back to the browser.
   if (out.llm_api_key) out.llm_api_key = `saved:${out.llm_api_key.slice(0, 6)}…${out.llm_api_key.slice(-4)}`;
-  res.json({ ...out, default_models: DEFAULT_MODELS });
+  const source = out.google_maps_api_key ? "db" : process.env.GOOGLE_MAPS_API_KEY ? "env" : null;
+  out.google_maps_api_key = effectiveGmapsKey();
+  res.json({ ...out, google_maps_key_source: source, default_models: DEFAULT_MODELS });
+}));
+
+// List chat models available to the given (or saved) key, for the Settings dropdown.
+api.post("/llm/models", wrap(async (req, res) => {
+  const provider = (req.body.provider || getSetting("llm_provider") || "anthropic") as any;
+  let key = String(req.body.api_key || "");
+  if (!key || key.startsWith("saved:")) key = getSetting("llm_api_key") || "";
+  if (!key) throw Object.assign(new Error("Enter an API key first, then load the model list"), { status: 400 });
+  res.json({ models: await listModels(provider, key) });
 }));
 
 api.put("/settings", wrap((req, res) => {

@@ -112,6 +112,55 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
   }
 }
 
+/** List chat-capable model ids for a provider, newest-ish first. */
+export async function listModels(provider: LlmConfig["provider"], apiKey: string): Promise<string[]> {
+  switch (provider) {
+    case "anthropic": {
+      const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      });
+      const data: any = await parseOrThrow(res, "Anthropic");
+      return (data.data || []).map((m: any) => m.id);
+    }
+    case "openai": {
+      const res = await fetch("https://api.openai.com/v1/models", {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      const data: any = await parseOrThrow(res, "OpenAI");
+      return (data.data || [])
+        .map((m: any) => String(m.id))
+        .filter(
+          (id: string) =>
+            /^(gpt-|o\d|chatgpt)/.test(id) &&
+            !/embed|audio|tts|whisper|dall|realtime|transcribe|moderation|image|search/.test(id)
+        )
+        .sort()
+        .reverse();
+    }
+    case "gemini": {
+      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100", {
+        headers: { "x-goog-api-key": apiKey },
+      });
+      const data: any = await parseOrThrow(res, "Gemini");
+      return (data.models || [])
+        .filter((m: any) => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map((m: any) => String(m.name).replace(/^models\//, ""))
+        .filter((id: string) => id.startsWith("gemini"))
+        .sort()
+        .reverse();
+    }
+    case "openrouter": {
+      const res = await fetch("https://openrouter.ai/api/v1/models", {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      const data: any = await parseOrThrow(res, "OpenRouter");
+      return (data.data || []).map((m: any) => String(m.id)).sort();
+    }
+    default:
+      throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+
 async function parseOrThrow(res: Response, providerName: string): Promise<unknown> {
   const text = await res.text();
   if (!res.ok) {

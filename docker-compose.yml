@@ -7,6 +7,11 @@ services:
     container_name: tripplanner
     ports:
       - "8080:8080"
+    environment:
+      # Optional: Google Maps browser key (Maps JavaScript API + Places API (New)).
+      # Put the real value in a .env file next to this compose file (gitignored) —
+      # the Settings UI is the alternative, and a key saved there wins over this.
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     volumes:
       - tripplanner-data:/app/data
     restart: unless-stopped

@@ -17,6 +17,9 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
   const [gmapsKey, setGmapsKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [modelList, setModelList] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [manualModel, setManualModel] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -24,8 +27,24 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
     setApiKey(settings.llm_api_key || "");
     setModel(settings.llm_model || "");
     setAutoReplan(settings.auto_replan === "1");
-    setGmapsKey(settings.google_maps_api_key || "");
+    // When the key comes from the environment, keep the field blank — saving a value here would override it.
+    setGmapsKey(settings.google_maps_key_source === "env" ? "" : settings.google_maps_api_key || "");
   }, [settings]);
+
+  async function loadModels() {
+    setLoadingModels(true);
+    setStatus(null);
+    try {
+      const r = await api.post<{ models: string[] }>("/llm/models", { provider, api_key: apiKey });
+      setModelList(r.models);
+      setManualModel(false);
+      if (r.models.length === 0) setStatus("Provider returned no models for this key.");
+    } catch (e: any) {
+      setStatus(`❌ ${e.message}`);
+    } finally {
+      setLoadingModels(false);
+    }
+  }
 
   async function save() {
     await api.put("/settings", {
@@ -60,7 +79,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         provider. It is never sent anywhere else.
       </p>
       <label className="block">Provider
-        <select value={provider} onChange={(e) => { setProvider(e.target.value); setModel(""); }}>
+        <select value={provider} onChange={(e) => { setProvider(e.target.value); setModel(""); setModelList([]); }}>
           {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
       </label>
@@ -73,8 +92,25 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         />
       </label>
       <label className="block">Model <span className="hint">(default: {settings?.default_models?.[provider]})</span>
-        <input placeholder={settings?.default_models?.[provider]} value={model} onChange={(e) => setModel(e.target.value)} />
+        {modelList.length > 0 && !manualModel ? (
+          <select value={model || settings?.default_models?.[provider] || ""} onChange={(e) => setModel(e.target.value)}>
+            {model && !modelList.includes(model) && <option value={model}>{model} (current)</option>}
+            {modelList.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        ) : (
+          <input placeholder={settings?.default_models?.[provider]} value={model} onChange={(e) => setModel(e.target.value)} />
+        )}
       </label>
+      <div className="row">
+        <button className="small" onClick={loadModels} disabled={loadingModels}>
+          {loadingModels ? "Loading…" : "↻ Load model list"}
+        </button>
+        {modelList.length > 0 && (
+          <button className="small" onClick={() => setManualModel(!manualModel)}>
+            {manualModel ? "Choose from list" : "Type manually"}
+          </button>
+        )}
+      </div>
       <label className="block row">
         <input type="checkbox" checked={autoReplan} onChange={(e) => setAutoReplan(e.target.checked)} />
         Auto-replan: regenerate the daily plan automatically a few seconds after the trip changes
@@ -87,8 +123,15 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         used by the map in your browser — restrict it to your domain in the Cloud Console.
       </p>
       <label className="block">Google Maps API key
-        <input placeholder="AIza…" value={gmapsKey} onChange={(e) => setGmapsKey(e.target.value)} />
+        <input
+          placeholder={settings?.google_maps_key_source === "env" ? "(provided by GOOGLE_MAPS_API_KEY environment variable)" : "AIza…"}
+          value={gmapsKey}
+          onChange={(e) => setGmapsKey(e.target.value)}
+        />
       </label>
+      {settings?.google_maps_key_source === "env" && (
+        <p className="hint">✅ Currently using the key from the <code>GOOGLE_MAPS_API_KEY</code> environment variable (docker-compose). Saving a value here would override it; leave blank to keep using the env var.</p>
+      )}
       <div className="row">
         <button className="primary" onClick={save}>Save</button>
         <button onClick={test} disabled={testing}>{testing ? "Testing…" : "Test LLM connection"}</button>

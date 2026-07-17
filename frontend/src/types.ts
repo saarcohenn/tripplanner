@@ -140,5 +140,6 @@ export type Settings = {
   llm_model: string | null;
   auto_replan: string | null;
   google_maps_api_key: string | null;
+  google_maps_key_source: "db" | "env" | null;
   default_models: Record<string, string>;
 };
