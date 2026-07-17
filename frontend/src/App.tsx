@@ -7,10 +7,11 @@ import PlacesTab from "./components/PlacesTab";
 import PlanTab from "./components/PlanTab";
 import TodosTab from "./components/TodosTab";
 import BookingsTab from "./components/BookingsTab";
+import ExpensesTab from "./components/ExpensesTab";
 import ImportTab from "./components/ImportTab";
 import SettingsTab from "./components/SettingsTab";
 
-const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Import", "Settings"] as const;
+const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -99,7 +100,13 @@ export default function App() {
         <ul className="trip-list">
           {trips.map((t) => (
             <li key={t.id} className={t.id === selectedId ? "active" : ""}>
-              <button className="trip-name" onClick={() => setSelectedId(t.id)} dir="auto">{t.name}</button>
+              <button className="trip-name" onClick={() => setSelectedId(t.id)} dir="auto">
+                <span
+                  className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
+                  title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
+                />
+                {t.name}
+              </button>
               <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
             </li>
           ))}
@@ -138,13 +145,15 @@ export default function App() {
         ) : tab === "Overview" ? (
           <OverviewTab detail={detail} refresh={refresh} />
         ) : tab === "Map" ? (
-          <MapTab detail={detail} refresh={refresh} />
+          <MapTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null} />
         ) : tab === "Places" ? (
-          <PlacesTab detail={detail} refresh={refresh} />
+          <PlacesTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null} />
         ) : tab === "Plan" ? (
           <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan} busy={!!busy} />
         ) : tab === "Todos" ? (
           <TodosTab detail={detail} refresh={refresh} />
+        ) : tab === "Expenses" ? (
+          <ExpensesTab detail={detail} refresh={refresh} />
         ) : (
           <BookingsTab detail={detail} refresh={refresh} />
         )}

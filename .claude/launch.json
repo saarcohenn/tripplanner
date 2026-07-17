@@ -5,7 +5,7 @@
       "name": "backend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "backend"],
-      "port": 8080
+      "port": 8090
     },
     {
       "name": "web",

@@ -9,6 +9,7 @@ export type Trip = {
   currency: string;
   notes: string;
   plan_version: number;
+  stage: "collect" | "planned";
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +40,20 @@ export type Place = {
   status: "active" | "dropped";
   notes: string;
   gmaps_url: string;
+  google_place_id: string;
+  photo_ref: string;
+};
+
+export type Expense = {
+  id: number;
+  trip_id: number;
+  leg_id: number | null;
+  category: string;
+  title: string;
+  amount: number;
+  currency: string;
+  date: string | null;
+  notes: string;
 };
 
 export type Todo = {
@@ -71,6 +86,8 @@ export type PlanItem = {
   title: string;
   place_id: number | null;
   duration_min: number;
+  details?: string;
+  tip?: string;
   note?: string;
 };
 
@@ -78,6 +95,8 @@ export type PlanDay = {
   date: string;
   city: string;
   wake_time: string;
+  alarm_time?: string;
+  alarm_reason?: string;
   summary: string;
   items: PlanItem[];
   warnings?: string[];
@@ -111,6 +130,7 @@ export type TripDetail = {
   places: Place[];
   bookings: Booking[];
   todos: Todo[];
+  expenses: Expense[];
   plan: PlanRow | null;
 };
 
@@ -119,5 +139,6 @@ export type Settings = {
   llm_api_key: string | null;
   llm_model: string | null;
   auto_replan: string | null;
+  google_maps_api_key: string | null;
   default_models: Record<string, string>;
 };

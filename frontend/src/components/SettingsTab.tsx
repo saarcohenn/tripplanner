@@ -14,6 +14,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [autoReplan, setAutoReplan] = useState(false);
+  const [gmapsKey, setGmapsKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -23,6 +24,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
     setApiKey(settings.llm_api_key || "");
     setModel(settings.llm_model || "");
     setAutoReplan(settings.auto_replan === "1");
+    setGmapsKey(settings.google_maps_api_key || "");
   }, [settings]);
 
   async function save() {
@@ -31,6 +33,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
       llm_api_key: apiKey,
       llm_model: model || (settings?.default_models?.[provider] ?? ""),
       auto_replan: autoReplan ? "1" : "0",
+      google_maps_api_key: gmapsKey,
     });
     await reload();
     setStatus("Saved.");
@@ -76,9 +79,19 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         <input type="checkbox" checked={autoReplan} onChange={(e) => setAutoReplan(e.target.checked)} />
         Auto-replan: regenerate the daily plan automatically a few seconds after the trip changes
       </label>
+      <h2>Google Maps</h2>
+      <p className="hint">
+        Optional. With a Google Maps Platform API key the map switches to Google Maps with English
+        labels, search returns English place names, and places get photos. Enable "Maps JavaScript API"
+        and "Places API (New)" for the key in Google Cloud Console. Note: unlike the LLM key, this key is
+        used by the map in your browser — restrict it to your domain in the Cloud Console.
+      </p>
+      <label className="block">Google Maps API key
+        <input placeholder="AIza…" value={gmapsKey} onChange={(e) => setGmapsKey(e.target.value)} />
+      </label>
       <div className="row">
         <button className="primary" onClick={save}>Save</button>
-        <button onClick={test} disabled={testing}>{testing ? "Testing…" : "Test connection"}</button>
+        <button onClick={test} disabled={testing}>{testing ? "Testing…" : "Test LLM connection"}</button>
       </div>
       {status && <p dir="auto">{status}</p>}
     </div>

@@ -155,6 +155,48 @@ h2 { font-size: 16px; margin: 14px 0 8px; }
 h3 { font-size: 13px; margin: 14px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
 a { color: var(--accent); }
 
+/* Trip stage indicator */
+.stage-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--muted); margin-right: 7px; opacity: 0.6;
+}
+.stage-dot.planned { background: #4caf50; opacity: 1; box-shadow: 0 0 5px #4caf5088; }
+
+/* Place photos */
+.thumb-cell { width: 64px; }
+.place-thumb {
+  width: 56px; height: 42px; object-fit: cover; border-radius: 6px; display: block;
+}
+.place-thumb.empty {
+  display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 42px; background: var(--panel2); border-radius: 6px; opacity: 0.4;
+}
+.place-card { max-width: 220px; }
+.place-photo { width: 100%; border-radius: 6px; margin-bottom: 6px; display: block; }
+
+/* Plan guide details */
+.alarm { margin-left: auto; font-size: 12px; color: var(--muted); }
+.alarm.early { color: var(--warn); font-weight: 600; }
+.alarm + .wake { margin-left: 10px; }
+.alarm-reason { font-size: 12px; color: var(--warn); margin-top: 2px; }
+.item-details { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.item-tip { font-size: 12px; color: #8fd19e; margin-top: 2px; }
+
+/* Expenses */
+.exp-summary { display: flex; gap: 24px; align-items: center; margin: 10px 0 18px; flex-wrap: wrap; }
+.exp-stat.grow { flex: 1; min-width: 220px; }
+.exp-num { font-size: 26px; font-weight: 700; }
+.budget-bar { height: 12px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+.budget-fill { height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.3s; }
+.budget-fill.over { background: var(--danger); }
+.over-text { color: var(--danger); }
+.exp-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; max-width: 900px; }
+.exp-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.exp-label { width: 90px; font-size: 12px; color: var(--muted); text-align: right; }
+.exp-bar-track { flex: 1; height: 10px; background: var(--panel2); border-radius: 5px; overflow: hidden; }
+.exp-bar { height: 100%; background: var(--accent); border-radius: 5px; }
+.exp-amt { width: 60px; font-size: 12px; font-variant-numeric: tabular-nums; }
+
 /* Leaflet dark-ish popup fix */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel2); color: var(--text); }
 .leaflet-popup-content a { color: var(--accent); }

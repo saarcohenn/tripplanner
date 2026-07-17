@@ -87,11 +87,35 @@ CREATE TABLE IF NOT EXISTS plans (
   generated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  leg_id INTEGER REFERENCES legs(id) ON DELETE SET NULL,
+  category TEXT DEFAULT 'other',                  -- food | transport | lodging | activities | shopping | other
+  title TEXT NOT NULL,
+  amount REAL NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  date TEXT,
+  notes TEXT DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
 `);
+
+// Additive migrations for databases created by older versions.
+function addColumn(table: string, ddl: string) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  } catch {
+    /* column already exists */
+  }
+}
+addColumn("trips", "stage TEXT NOT NULL DEFAULT 'collect'"); // collect | planned
+addColumn("places", "google_place_id TEXT DEFAULT ''");
+addColumn("places", "photo_ref TEXT DEFAULT ''");
 
 export function bumpPlanVersion(tripId: number) {
   db.prepare(

@@ -64,8 +64,10 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, busy 
           <div className="day-card" key={d.date}>
             <div className="day-head">
               <strong>{d.date}</strong> · <span dir="auto">{d.city}</span>
+              {d.alarm_time && <span className={`alarm ${d.alarm_time < "07:30" ? "early" : ""}`} title={d.alarm_reason || ""}>🔔 alarm {d.alarm_time}</span>}
               <span className={`wake ${d.wake_time < "07:30" ? "early" : ""}`}>⏰ wake {d.wake_time}</span>
             </div>
+            {d.alarm_reason && <div className="alarm-reason" dir="auto">🔔 {d.alarm_reason}</div>}
             <div className="hint" dir="auto">{d.summary}</div>
             <ul className="items">
               {d.items?.map((it, i) => (
@@ -77,6 +79,8 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, busy 
                     {it.place_id != null && placeById.get(it.place_id)?.status === "dropped" && (
                       <em className="hint"> (dropped — regenerate)</em>
                     )}
+                    {it.details && <div className="item-details" dir="auto">{it.details}</div>}
+                    {it.tip && <div className="item-tip" dir="auto">💡 {it.tip}</div>}
                   </span>
                   <span className="hint">{it.duration_min ? `${it.duration_min}m` : ""}</span>
                 </li>

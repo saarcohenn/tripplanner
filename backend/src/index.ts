@@ -17,5 +17,6 @@ if (fs.existsSync(publicDir)) {
   app.get("*", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
 }
 
-const port = Number(process.env.PORT || 8080);
+// Dev default is 8090 so it can run next to the production container on 8080.
+const port = Number(process.env.PORT || (process.env.NODE_ENV === "production" ? 8080 : 8090));
 app.listen(port, () => console.log(`TripPlanner API listening on :${port}`));

@@ -9,10 +9,19 @@ your own plan work.
 
 - **Multi-city / multi-country trips** — a trip is an ordered list of legs (city + date range).
   One-way, round-trip and multi-city are all supported.
-- **Interactive map** (Leaflet + OpenStreetMap) — search places (Nominatim), click the map to
-  pin, or paste a Google Maps link. Every place gets an "Open in Google Maps" link back.
-- **Plan generator** — your configured LLM arranges *only the places you added* into a daily
-  schedule with meals, transit, rest blocks and wake-up times.
+- **Interactive map** — with a Google Maps API key: Google map tiles with **English labels**,
+  English place search, and **place photos** (Places API). Without one it falls back to
+  Leaflet + OpenStreetMap with Nominatim search. Either way: click-to-pin, paste a Google Maps
+  link, and an "Open in Google Maps" link on every place.
+- **Multi-stage trips** — stage 1: collect places; stage 2: generate the plan (trip turns
+  **green**); stage 3: adding a place to a planned trip asks for confirmation first, since the
+  plan may change.
+- **Plan generator** — your configured LLM arranges *only the places you added* into a detailed
+  daily travel guide: directions between stops, queue-avoidance tips, meals, transit, rest
+  blocks, and a per-day **alarm suggestion** ("Alarm 06:45 — be at Fushimi Inari by 07:30,
+  before the tour groups").
+- **Expenses** — log spending per city/category, see totals vs. budget with breakdowns;
+  booking costs are included automatically.
 - **Advisor** — reviews the plan and flags overloaded days, drop candidates, needed rest and
   early wake-ups. It is hard-prompted to never recommend new attractions.
 - **Change listener** — any change to legs/places/bookings marks the plan outdated; with
@@ -51,7 +60,7 @@ docker compose pull && docker compose up -d
 ## Local development
 
 ```bash
-# terminal 1 — API on :8080
+# terminal 1 — API on :8090 (so it can run next to the production container on :8080)
 cd backend && npm install && npm run dev
 
 # terminal 2 — Vite dev server on :5173 (proxies /api)

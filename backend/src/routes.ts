@@ -45,13 +45,14 @@ api.post("/trips", wrap((req, res) => {
 api.get("/trips/:id", wrap((req, res) => {
   const b = getBundle(Number(req.params.id));
   const todos = db.prepare("SELECT * FROM todos WHERE trip_id = ? ORDER BY done, due_date, id").all(req.params.id);
+  const expenses = db.prepare("SELECT * FROM expenses WHERE trip_id = ? ORDER BY date, id").all(req.params.id);
   const plan = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(req.params.id);
-  res.json({ ...b, todos, plan: plan ?? null });
+  res.json({ ...b, todos, expenses, plan: plan ?? null });
 }));
 
 api.put("/trips/:id", wrap((req, res) => {
   const id = Number(req.params.id);
-  const fields = ["name", "trip_type", "start_date", "end_date", "home_city", "budget", "currency", "notes"];
+  const fields = ["name", "trip_type", "start_date", "end_date", "home_city", "budget", "currency", "notes", "stage"];
   const sets = fields.filter((f) => f in req.body);
   if (sets.length) {
     db.prepare(`UPDATE trips SET ${sets.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`)
@@ -70,8 +71,9 @@ api.delete("/trips/:id", wrap((req, res) => {
 type ChildSpec = { table: string; fields: string[]; affectsPlan: boolean };
 const children: Record<string, ChildSpec> = {
   legs: { table: "legs", fields: ["seq", "city", "country", "arrive_date", "depart_date", "lat", "lng", "notes"], affectsPlan: true },
-  places: { table: "places", fields: ["leg_id", "name", "category", "lat", "lng", "duration_min", "priority", "status", "notes", "gmaps_url"], affectsPlan: true },
+  places: { table: "places", fields: ["leg_id", "name", "category", "lat", "lng", "duration_min", "priority", "status", "notes", "gmaps_url", "google_place_id", "photo_ref"], affectsPlan: true },
   todos: { table: "todos", fields: ["text", "category", "due_date", "done"], affectsPlan: false },
+  expenses: { table: "expenses", fields: ["leg_id", "category", "title", "amount", "currency", "date", "notes"], affectsPlan: false },
   bookings: { table: "bookings", fields: ["leg_id", "kind", "title", "ref", "url", "date", "end_date", "cost", "currency", "notes"], affectsPlan: true },
 };
 
@@ -125,6 +127,8 @@ api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
   const r = db.prepare(
     `INSERT INTO plans (trip_id, plan_version, plan_json, advisor_json) VALUES (?,?,?,?)`
   ).run(tripId, version, JSON.stringify(plan), JSON.stringify(advisor));
+  // A generated plan moves the trip into the "planned" (green) stage.
+  db.prepare("UPDATE trips SET stage = 'planned' WHERE id = ?").run(tripId);
   res.json(db.prepare("SELECT * FROM plans WHERE id = ?").get(r.lastInsertRowid));
 }));
 
@@ -193,8 +197,86 @@ api.post("/import/conversation", wrap(async (req, res) => {
   res.json({ trip_id: tripId });
 }));
 
+// ---------- Google Places (English search + photos) ----------
+function gmapsKey(): string {
+  const key = getSetting("google_maps_api_key");
+  if (!key) throw Object.assign(new Error("No Google Maps API key configured (Settings)"), { status: 400 });
+  return key;
+}
+
+type GPlace = {
+  place_id: string; name: string; address: string;
+  lat: number | null; lng: number | null; photo_ref: string;
+};
+
+async function gplacesSearch(query: string, key: string): Promise<GPlace[]> {
+  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.photos",
+    },
+    body: JSON.stringify({ textQuery: query, languageCode: "en", maxResultCount: 5 }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw Object.assign(new Error(`Google Places error (${res.status}): ${text.slice(0, 300)}`), { status: 502 });
+  const data: any = JSON.parse(text);
+  return (data.places || []).map((p: any) => ({
+    place_id: p.id,
+    name: p.displayName?.text || "",
+    address: p.formattedAddress || "",
+    lat: p.location?.latitude ?? null,
+    lng: p.location?.longitude ?? null,
+    photo_ref: p.photos?.[0]?.name || "",
+  }));
+}
+
+api.get("/gplaces/search", wrap(async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q) throw Object.assign(new Error("q is required"), { status: 400 });
+  res.json(await gplacesSearch(q, gmapsKey()));
+}));
+
+api.get("/places/:id/photo", wrap(async (req, res) => {
+  const p: any = db.prepare("SELECT * FROM places WHERE id = ?").get(Number(req.params.id));
+  if (!p?.photo_ref) throw Object.assign(new Error("No photo for this place"), { status: 404 });
+  const r = await fetch(
+    `https://places.googleapis.com/v1/${p.photo_ref}/media?maxWidthPx=640&key=${encodeURIComponent(gmapsKey())}`
+  );
+  if (!r.ok) throw Object.assign(new Error(`Photo fetch failed (${r.status})`), { status: 502 });
+  res.set("content-type", r.headers.get("content-type") || "image/jpeg");
+  res.set("cache-control", "private, max-age=86400");
+  res.send(Buffer.from(await r.arrayBuffer()));
+}));
+
+// Look up photos (and missing coordinates) for every place that doesn't have one yet.
+api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
+  const key = gmapsKey();
+  const b = getBundle(Number(req.params.id));
+  const legCity = new Map(b.legs.map((l: any) => [l.id, l.city]));
+  let updated = 0;
+  for (const p of b.places as any[]) {
+    if (p.photo_ref) continue;
+    const city = legCity.get(p.leg_id) || "";
+    try {
+      const results = await gplacesSearch(city ? `${p.name}, ${city}` : p.name, key);
+      const hit = results[0];
+      if (!hit) continue;
+      db.prepare(
+        `UPDATE places SET google_place_id = ?, photo_ref = ?,
+           lat = COALESCE(lat, ?), lng = COALESCE(lng, ?) WHERE id = ?`
+      ).run(hit.place_id, hit.photo_ref, hit.lat, hit.lng, p.id);
+      updated++;
+    } catch {
+      /* skip places Google can't find */
+    }
+  }
+  res.json({ updated });
+}));
+
 // ---------- settings ----------
-const SETTING_KEYS = ["llm_provider", "llm_api_key", "llm_model", "auto_replan"];
+const SETTING_KEYS = ["llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key"];
 
 api.get("/settings", wrap((_req, res) => {
   const out: Record<string, string | null> = {};

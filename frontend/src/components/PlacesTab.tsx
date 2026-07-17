@@ -4,15 +4,32 @@ import type { Place, TripDetail } from "../types";
 
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
-export default function PlacesTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
+export default function PlacesTab({ detail, refresh, gmapsKey }: { detail: TripDetail; refresh: () => Promise<void>; gmapsKey: string | null }) {
   const { trip, legs, places } = detail;
   const [form, setForm] = useState({ name: "", leg_id: "" as number | "", category: "sight", duration_min: 90, priority: "want", notes: "" });
+  const [fetchingPhotos, setFetchingPhotos] = useState(false);
 
   async function addPlace() {
     if (!form.name) return;
+    if (trip.stage === "planned" &&
+        !window.confirm("This trip already has a generated plan (green). Adding a place will mark the plan outdated and it may change when regenerated. Add anyway?")) {
+      return;
+    }
     await api.post(`/trips/${trip.id}/places`, { ...form, leg_id: form.leg_id === "" ? null : form.leg_id });
     setForm({ ...form, name: "", notes: "" });
     await refresh();
+  }
+
+  async function fetchPhotos() {
+    setFetchingPhotos(true);
+    try {
+      await api.post<{ updated: number }>(`/trips/${trip.id}/fetch-photos`);
+      await refresh();
+    } catch (e: any) {
+      window.alert(e.message);
+    } finally {
+      setFetchingPhotos(false);
+    }
   }
 
   async function patch(p: Place, patchObj: Partial<Place>) {
@@ -38,7 +55,14 @@ export default function PlacesTab({ detail, refresh }: { detail: TripDetail; ref
 
   return (
     <div className="pad">
-      <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
+      <div className="row spread">
+        <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
+        {gmapsKey && (
+          <button onClick={fetchPhotos} disabled={fetchingPhotos} title="Look up Google Maps photos for places that don't have one">
+            {fetchingPhotos ? "Fetching…" : "📷 Fetch photos"}
+          </button>
+        )}
+      </div>
       <div className="add-row">
         <input dir="auto" placeholder="Place name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
@@ -63,6 +87,9 @@ export default function PlacesTab({ detail, refresh }: { detail: TripDetail; ref
             <tbody>
               {g.items.map((p) => (
                 <tr key={p.id} className={p.status === "dropped" ? "dropped" : ""}>
+                  <td className="thumb-cell">
+                    {p.photo_ref ? <img className="place-thumb" src={`/api/places/${p.id}/photo`} alt="" loading="lazy" /> : <span className="place-thumb empty">🏞️</span>}
+                  </td>
                   <td dir="auto" className="grow"><strong>{p.name}</strong>{p.notes && <div className="hint" dir="auto">{p.notes}</div>}</td>
                   <td>
                     <select value={p.category} onChange={(e) => patch(p, { category: e.target.value })}>
