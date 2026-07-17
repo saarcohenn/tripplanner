@@ -1,0 +1,15 @@
+services:
+  tripplanner:
+    build: .
+    # After pushing to GHCR, your homelab can pull instead of build:
+    #   docker compose pull && docker compose up -d
+    image: ghcr.io/YOUR_GITHUB_USERNAME/tripplanner:latest
+    container_name: tripplanner
+    ports:
+      - "8080:8080"
+    volumes:
+      - tripplanner-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tripplanner-data:
