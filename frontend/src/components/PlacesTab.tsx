@@ -1,23 +1,42 @@
 import { useState } from "react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
+import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
-export default function PlacesTab({ detail, refresh, gmapsKey }: { detail: TripDetail; refresh: () => Promise<void>; gmapsKey: string | null }) {
+export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generatePlan }: {
+  detail: TripDetail;
+  refresh: () => Promise<void>;
+  gmapsKey: string | null;
+  llmReady: boolean;
+  generatePlan: () => Promise<void>;
+}) {
   const { trip, legs, places } = detail;
   const [form, setForm] = useState({ name: "", leg_id: "" as number | "", category: "sight", duration_min: 90, priority: "want", notes: "" });
   const [fetchingPhotos, setFetchingPhotos] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
 
-  async function addPlace() {
-    if (!form.name) return;
-    if (trip.stage === "planned" &&
-        !window.confirm("This trip already has a generated plan (green). Adding a place will mark the plan outdated and it may change when regenerated. Add anyway?")) {
-      return;
-    }
+  async function doAdd() {
     await api.post(`/trips/${trip.id}/places`, { ...form, leg_id: form.leg_id === "" ? null : form.leg_id });
     setForm({ ...form, name: "", notes: "" });
     await refresh();
+  }
+
+  async function addPlace() {
+    if (!form.name) return;
+    if (trip.stage === "planned") {
+      setGateOpen(true);
+      return;
+    }
+    await doAdd();
+  }
+
+  async function onGateChoice(c: PlanGateChoice) {
+    setGateOpen(false);
+    if (c === "cancel") return;
+    await doAdd();
+    if (c === "add_regen") await generatePlan();
   }
 
   async function fetchPhotos() {
@@ -55,6 +74,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey }: { detail: TripD
 
   return (
     <div className="pad">
+      <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
       <div className="row spread">
         <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
         {gmapsKey && (

@@ -145,9 +145,11 @@ export default function App() {
         ) : tab === "Overview" ? (
           <OverviewTab detail={detail} refresh={refresh} />
         ) : tab === "Map" ? (
-          <MapTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null} />
+          <MapTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null}
+            llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Places" ? (
-          <PlacesTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null} />
+          <PlacesTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null}
+            llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Plan" ? (
           <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan} busy={!!busy} />
         ) : tab === "Todos" ? (

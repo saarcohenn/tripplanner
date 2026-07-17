@@ -297,6 +297,28 @@ api.put("/settings", wrap((req, res) => {
 
 api.post("/settings/test", wrap(async (_req, res) => {
   const cfg = loadLlmConfig();
+  // For Gemini, validate the key and model name first — its errors are otherwise cryptic.
+  if (cfg.provider === "gemini") {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=50&key=${encodeURIComponent(cfg.apiKey)}`
+    );
+    const body = await r.text();
+    if (!r.ok) {
+      throw Object.assign(
+        new Error(`Gemini rejected the API key (${r.status}). Get a key from https://aistudio.google.com/apikey — a Google *Maps* key will not work. Details: ${body.slice(0, 300)}`),
+        { status: 502 }
+      );
+    }
+    const models: string[] = (JSON.parse(body).models || []).map((m: any) => String(m.name).replace(/^models\//, ""));
+    const wanted = cfg.model.replace(/^models\//, "");
+    if (models.length && !models.includes(wanted)) {
+      const suggestions = models.filter((m) => m.startsWith("gemini")).slice(0, 8).join(", ");
+      throw Object.assign(
+        new Error(`Model "${wanted}" is not available for this key. Try one of: ${suggestions}`),
+        { status: 400 }
+      );
+    }
+  }
   const reply = await complete("Reply with exactly: OK", "ping", cfg);
   res.json({ ok: true, model: cfg.model, reply: reply.trim().slice(0, 100) });
 }));

@@ -76,9 +76,11 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
       return data.choices?.[0]?.message?.content ?? "";
     }
     case "gemini": {
+      // Accept both "gemini-2.5-flash" and "models/gemini-2.5-flash".
+      const model = c.model.replace(/^models\//, "");
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          c.model
+          model
         )}:generateContent?key=${encodeURIComponent(c.apiKey)}`,
         {
           method: "POST",
@@ -90,9 +92,19 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
         }
       );
       const data: any = await parseOrThrow(res, "Gemini");
-      return (data.candidates?.[0]?.content?.parts || [])
+      const cand = data.candidates?.[0];
+      const text = (cand?.content?.parts || [])
+        .filter((p: any) => !p.thought)
         .map((p: any) => p.text || "")
         .join("");
+      if (!text) {
+        const why = cand?.finishReason || data.promptFeedback?.blockReason || "no candidates returned";
+        throw Object.assign(
+          new Error(`Gemini returned an empty reply (${why}). Raw: ${JSON.stringify(data).slice(0, 300)}`),
+          { status: 502 }
+        );
+      }
+      return text;
     }
     default:
       throw new Error(`Unknown provider: ${(c as any).provider}`);

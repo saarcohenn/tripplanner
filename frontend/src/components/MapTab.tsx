@@ -4,6 +4,7 @@ import type { LatLngExpression } from "leaflet";
 import { APIProvider, Map as GMap, Marker, InfoWindow } from "@vis.gl/react-google-maps";
 import { api, gmapsLink, parseGmapsUrl } from "../api";
 import type { Place, TripDetail } from "../types";
+import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 
 type Pending = { lat: number; lng: number; name: string; google_place_id?: string; photo_ref?: string };
 type SearchResult = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
@@ -20,10 +21,12 @@ function ClickCapture({ onClick }: { onClick: (lat: number, lng: number) => void
   return null;
 }
 
-export default function MapTab({ detail, refresh, gmapsKey }: {
+export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePlan }: {
   detail: TripDetail;
   refresh: () => Promise<void>;
   gmapsKey: string | null;
+  llmReady: boolean;
+  generatePlan: () => Promise<void>;
 }) {
   const { trip, legs, places } = detail;
   const [query, setQuery] = useState("");
@@ -32,6 +35,7 @@ export default function MapTab({ detail, refresh, gmapsKey }: {
   const [pendingLeg, setPendingLeg] = useState<number | "">("");
   const [searching, setSearching] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [gateOpen, setGateOpen] = useState(false);
 
   const center = useMemo(() => {
     const withCoords = places.filter((p) => p.lat != null && p.lng != null);
@@ -80,10 +84,22 @@ export default function MapTab({ detail, refresh, gmapsKey }: {
 
   async function addPending() {
     if (!pending) return;
-    if (trip.stage === "planned" &&
-        !window.confirm("This trip already has a generated plan (green). Adding a place will mark the plan outdated and it may change when regenerated. Add anyway?")) {
+    if (trip.stage === "planned") {
+      setGateOpen(true);
       return;
     }
+    await doAdd();
+  }
+
+  async function onGateChoice(c: PlanGateChoice) {
+    setGateOpen(false);
+    if (c === "cancel") return;
+    await doAdd();
+    if (c === "add_regen") await generatePlan();
+  }
+
+  async function doAdd() {
+    if (!pending) return;
     await api.post(`/trips/${trip.id}/places`, {
       name: pending.name || "Unnamed place",
       lat: pending.lat,
@@ -114,6 +130,7 @@ export default function MapTab({ detail, refresh, gmapsKey }: {
 
   return (
     <div className="map-layout">
+      <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
       <div className="map-side">
         <div className="search-row">
           <input
