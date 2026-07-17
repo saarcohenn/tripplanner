@@ -1,5 +1,5 @@
 # ---- frontend build ----
-FROM node:20-bookworm-slim AS frontend
+FROM node:24-bookworm-slim AS frontend
 WORKDIR /fe
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---- backend build ----
-FROM node:20-bookworm-slim AS backend
+FROM node:24-bookworm-slim AS backend
 WORKDIR /be
 COPY backend/package.json backend/package-lock.json* ./
 RUN npm install
@@ -15,7 +15,7 @@ COPY backend/ ./
 RUN npm run build && npm prune --omit=dev
 
 # ---- runtime ----
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/app/data
