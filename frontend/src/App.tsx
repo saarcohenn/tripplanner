@@ -155,9 +155,9 @@ export default function App() {
         ) : tab === "Todos" ? (
           <TodosTab detail={detail} refresh={refresh} />
         ) : tab === "Expenses" ? (
-          <ExpensesTab detail={detail} refresh={refresh} />
+          <ExpensesTab detail={detail} refresh={refresh} homeCurrency={settings?.home_currency || null} />
         ) : (
-          <BookingsTab detail={detail} refresh={refresh} />
+          <BookingsTab detail={detail} refresh={refresh} homeCurrency={settings?.home_currency || null} />
         )}
       </main>
     </div>

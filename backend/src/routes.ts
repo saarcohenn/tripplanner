@@ -280,10 +280,31 @@ api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
   res.json({ updated });
 }));
 
+// ---------- FX rates (free ECB-style feed, cached 12h in the settings table) ----------
+api.get("/fx/:base", wrap(async (req, res) => {
+  const base = String(req.params.base).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(base)) throw Object.assign(new Error("base must be a 3-letter currency code"), { status: 400 });
+  const cacheKey = `fx_${base}`;
+  const cached = getSetting(cacheKey);
+  if (cached) {
+    try {
+      const c = JSON.parse(cached);
+      if (Date.now() - c.ts < 12 * 3600 * 1000) return res.json({ base, rates: c.rates, cached: true });
+    } catch { /* refetch */ }
+  }
+  const r = await fetch(`https://open.er-api.com/v6/latest/${base}`);
+  const data: any = await r.json().catch(() => ({}));
+  if (data.result !== "success" || !data.rates) {
+    throw Object.assign(new Error(`FX rates unavailable (${r.status})`), { status: 502 });
+  }
+  setSetting(cacheKey, JSON.stringify({ ts: Date.now(), rates: data.rates }));
+  res.json({ base, rates: data.rates });
+}));
+
 // ---------- settings ----------
 const SETTING_KEYS = [
   "llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key",
-  "llm_price_in", "llm_price_out", "llm_monthly_budget",
+  "llm_price_in", "llm_price_out", "llm_monthly_budget", "home_currency",
 ];
 
 api.get("/settings", wrap((_req, res) => {

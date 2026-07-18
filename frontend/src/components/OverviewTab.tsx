@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import type { Leg, TripDetail } from "../types";
+import CurrencySelect from "./CurrencySelect";
 
 export default function OverviewTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
   const { trip, legs } = detail;
@@ -64,7 +65,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
         <label>End <input type="date" value={form.end_date ?? ""} onChange={(e) => setForm({ ...form, end_date: e.target.value })} /></label>
         <label>Home city <input dir="auto" value={form.home_city ?? ""} onChange={(e) => setForm({ ...form, home_city: e.target.value })} /></label>
         <label>Budget <input type="number" value={form.budget ?? ""} onChange={(e) => setForm({ ...form, budget: e.target.value as any })} /></label>
-        <label>Currency <input value={form.currency ?? ""} onChange={(e) => setForm({ ...form, currency: e.target.value })} /></label>
+        <label>Budget currency <CurrencySelect value={form.currency || "USD"} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} /></label>
       </div>
       <label className="block">Notes
         <textarea dir="auto" rows={3} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

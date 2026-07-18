@@ -147,6 +147,7 @@ export type Settings = {
   llm_price_in: string | null;
   llm_price_out: string | null;
   llm_monthly_budget: string | null;
+  home_currency: string | null;
   default_models: Record<string, string>;
 };
 

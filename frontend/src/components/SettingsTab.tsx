@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { LlmUsage, ProviderPlan, Settings } from "../types";
+import CurrencySelect from "./CurrencySelect";
 
 const PROVIDERS = [
   { id: "anthropic", label: "Anthropic (Claude)" },
@@ -164,6 +165,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
   const [model, setModel] = useState("");
   const [autoReplan, setAutoReplan] = useState(false);
   const [gmapsKey, setGmapsKey] = useState("");
+  const [homeCurrency, setHomeCurrency] = useState("USD");
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [modelList, setModelList] = useState<string[]>([]);
@@ -189,6 +191,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
     setPriceIn(settings.llm_price_in || "");
     setPriceOut(settings.llm_price_out || "");
     setMonthlyBudget(settings.llm_monthly_budget || "");
+    setHomeCurrency(settings.home_currency || "USD");
   }, [settings]);
 
   async function loadModels() {
@@ -222,6 +225,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
       llm_price_in: priceIn,
       llm_price_out: priceOut,
       llm_monthly_budget: monthlyBudget,
+      home_currency: homeCurrency,
     });
     await reload();
     setStatus("Saved.");
@@ -286,6 +290,15 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         <input type="checkbox" checked={autoReplan} onChange={(e) => setAutoReplan(e.target.checked)} />
         Auto-replan: regenerate the daily plan automatically a few seconds after the trip changes
       </label>
+      <h2>Money</h2>
+      <label className="block">Home currency
+        <CurrencySelect value={homeCurrency} onChange={setHomeCurrency} />
+      </label>
+      <p className="hint">
+        All expenses and bookings — whatever currency you paid in — are converted to this currency
+        in the Expenses summary, so you always see your spending against the budget in the money you think in.
+      </p>
+
       <h2>Google Maps</h2>
       <p className="hint">
         Optional. With a Google Maps Platform API key the map switches to Google Maps with English

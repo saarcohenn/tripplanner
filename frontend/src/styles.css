@@ -258,6 +258,22 @@ a { color: var(--accent-dark); }
 input.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
 input.subtle:hover, input.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
 
+/* ---------- foldable booking cards ---------- */
+.bcard {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); margin: 8px 0; overflow: hidden;
+}
+.bcard-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; border-radius: 0; box-shadow: none;
+  padding: 12px 14px; cursor: pointer; text-align: left; font-size: 13px; color: var(--text);
+}
+.bcard-head:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; }
+.bcard-chev { color: var(--muted); font-size: 11px; width: 12px; }
+.bcard-title { font-weight: 600; }
+.bcard-cost { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bcard-body { padding: 2px 16px 14px; border-top: 1px dashed var(--border); }
+
 /* ---------- expenses ---------- */
 .exp-summary {
   display: flex; gap: 28px; align-items: center; margin: 10px 0 18px; flex-wrap: wrap;
