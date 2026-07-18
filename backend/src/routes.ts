@@ -117,11 +117,11 @@ api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
   const b = getBundle(tripId);
   const version = (b.trip as any).plan_version;
   const p = planPrompt(b);
-  const raw = await complete(p.system, p.user);
+  const raw = await complete(p.system, p.user, undefined, "plan");
   const plan = extractJson(raw);
 
   const a = advisorPrompt(b, JSON.stringify(plan));
-  const advRaw = await complete(a.system, a.user);
+  const advRaw = await complete(a.system, a.user, undefined, "advisor");
   const advisor = extractJson(advRaw);
 
   const r = db.prepare(
@@ -138,7 +138,7 @@ api.post("/trips/:id/advise", wrap(async (req, res) => {
   const plan: any = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
   if (!plan) throw Object.assign(new Error("Generate a plan first"), { status: 400 });
   const a = advisorPrompt(b, plan.plan_json);
-  const advRaw = await complete(a.system, a.user);
+  const advRaw = await complete(a.system, a.user, undefined, "advisor");
   const advisor = extractJson(advRaw);
   db.prepare("UPDATE plans SET advisor_json = ? WHERE id = ?").run(JSON.stringify(advisor), plan.id);
   res.json(db.prepare("SELECT * FROM plans WHERE id = ?").get(plan.id));
@@ -151,7 +151,7 @@ api.post("/import/conversation", wrap(async (req, res) => {
     throw Object.assign(new Error("Paste the full conversation text (got almost nothing)"), { status: 400 });
   }
   const p = importPrompt(text.slice(0, 300_000));
-  const raw = await complete(p.system, p.user);
+  const raw = await complete(p.system, p.user, undefined, "import");
   const t = extractJson<any>(raw);
 
   const tx = db.transaction(() => {
@@ -281,7 +281,10 @@ api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
 }));
 
 // ---------- settings ----------
-const SETTING_KEYS = ["llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key"];
+const SETTING_KEYS = [
+  "llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key",
+  "llm_price_in", "llm_price_out", "llm_monthly_budget",
+];
 
 api.get("/settings", wrap((_req, res) => {
   const out: Record<string, string | null> = {};
@@ -336,6 +339,28 @@ api.post("/settings/test", wrap(async (_req, res) => {
       );
     }
   }
-  const reply = await complete("Reply with exactly: OK", "ping", cfg);
+  const reply = await complete("Reply with exactly: OK", "ping", cfg, "test");
   res.json({ ok: true, model: cfg.model, reply: reply.trim().slice(0, 100) });
+}));
+
+// ---------- LLM usage / billing ----------
+api.get("/llm/usage", wrap((_req, res) => {
+  const days = db.prepare(
+    `SELECT substr(ts, 1, 10) AS day, SUM(input_tokens) AS input_tokens,
+            SUM(output_tokens) AS output_tokens, COUNT(*) AS calls
+     FROM llm_usage WHERE ts >= datetime('now', '-30 days')
+     GROUP BY day ORDER BY day`
+  ).all();
+  const month = db.prepare(
+    `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens, COUNT(*) AS calls
+     FROM llm_usage WHERE ts >= date('now', 'start of month')`
+  ).get();
+  const totals = db.prepare(
+    `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens, COUNT(*) AS calls
+     FROM llm_usage`
+  ).get();
+  const recent = db.prepare(`SELECT * FROM llm_usage ORDER BY id DESC LIMIT 12`).all();
+  res.json({ days, month, totals, recent });
 }));

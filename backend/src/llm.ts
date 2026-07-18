@@ -1,4 +1,4 @@
-import { getSetting } from "./db.js";
+import { getSetting, recordLlmUsage } from "./db.js";
 
 export type LlmConfig = {
   provider: "anthropic" | "openai" | "gemini" | "openrouter";
@@ -28,9 +28,26 @@ export function loadLlmConfig(): LlmConfig {
   return { provider, apiKey, model };
 }
 
-/** Send a single-turn prompt to the configured provider, return raw text. */
-export async function complete(system: string, user: string, cfg?: LlmConfig): Promise<string> {
+/** Send a single-turn prompt to the configured provider, return raw text. Records token usage. */
+export async function complete(
+  system: string,
+  user: string,
+  cfg?: LlmConfig,
+  purpose = "other"
+): Promise<string> {
   const c = cfg || loadLlmConfig();
+  const r = await completeRaw(c, system, user);
+  try {
+    recordLlmUsage(c.provider, c.model, purpose, r.input, r.output);
+  } catch {
+    /* usage tracking must never break the actual call */
+  }
+  return r.text;
+}
+
+type RawResult = { text: string; input: number; output: number };
+
+async function completeRaw(c: LlmConfig, system: string, user: string): Promise<RawResult> {
   switch (c.provider) {
     case "anthropic": {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -48,10 +65,14 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
         }),
       });
       const data: any = await parseOrThrow(res, "Anthropic");
-      return (data.content || [])
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
-        .join("");
+      return {
+        text: (data.content || [])
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text)
+          .join(""),
+        input: data.usage?.input_tokens ?? 0,
+        output: data.usage?.output_tokens ?? 0,
+      };
     }
     case "openai":
     case "openrouter": {
@@ -74,7 +95,11 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
         }),
       });
       const data: any = await parseOrThrow(res, c.provider === "openai" ? "OpenAI" : "OpenRouter");
-      return data.choices?.[0]?.message?.content ?? "";
+      return {
+        text: data.choices?.[0]?.message?.content ?? "",
+        input: data.usage?.prompt_tokens ?? 0,
+        output: data.usage?.completion_tokens ?? 0,
+      };
     }
     case "gemini": {
       // Accept both "gemini-2.5-flash" and "models/gemini-2.5-flash".
@@ -106,7 +131,12 @@ export async function complete(system: string, user: string, cfg?: LlmConfig): P
           { status: 502 }
         );
       }
-      return text;
+      const um = data.usageMetadata || {};
+      return {
+        text,
+        input: um.promptTokenCount ?? 0,
+        output: (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0),
+      };
     }
     default:
       throw new Error(`Unknown provider: ${(c as any).provider}`);

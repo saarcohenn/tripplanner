@@ -141,5 +141,20 @@ export type Settings = {
   auto_replan: string | null;
   google_maps_api_key: string | null;
   google_maps_key_source: "db" | "env" | null;
+  llm_price_in: string | null;
+  llm_price_out: string | null;
+  llm_monthly_budget: string | null;
   default_models: Record<string, string>;
+};
+
+export type LlmUsageDay = { day: string; input_tokens: number; output_tokens: number; calls: number };
+export type LlmUsageRow = {
+  id: number; ts: string; provider: string; model: string; purpose: string;
+  input_tokens: number; output_tokens: number;
+};
+export type LlmUsage = {
+  days: LlmUsageDay[];
+  month: { input_tokens: number; output_tokens: number; calls: number };
+  totals: { input_tokens: number; output_tokens: number; calls: number };
+  recent: LlmUsageRow[];
 };

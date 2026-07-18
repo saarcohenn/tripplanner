@@ -103,6 +103,16 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS llm_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL DEFAULT (datetime('now')),
+  provider TEXT,
+  model TEXT,
+  purpose TEXT,                                   -- plan | advisor | import | test | other
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // Additive migrations for databases created by older versions.
@@ -134,6 +144,18 @@ export function setSetting(key: string, value: string) {
   db.prepare(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   ).run(key, value);
+}
+
+export function recordLlmUsage(
+  provider: string,
+  model: string,
+  purpose: string,
+  inputTokens: number,
+  outputTokens: number
+) {
+  db.prepare(
+    `INSERT INTO llm_usage (provider, model, purpose, input_tokens, output_tokens) VALUES (?,?,?,?,?)`
+  ).run(provider, model, purpose, Math.round(inputTokens || 0), Math.round(outputTokens || 0));
 }
 
 export function seedDemoIfEmpty() {

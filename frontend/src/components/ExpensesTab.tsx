@@ -2,10 +2,16 @@ import { useState } from "react";
 import { api } from "../api";
 import type { Expense, TripDetail } from "../types";
 
-const CATS = ["food", "transport", "lodging", "activities", "shopping", "other"] as const;
+const CATS = ["flights", "food", "transport", "lodging", "activities", "shopping", "other"] as const;
 const CAT_COLORS: Record<string, string> = {
-  food: "#e4664a", transport: "#4a90e2", lodging: "#9b6fd6",
-  activities: "#e4b34a", shopping: "#d64f9b", other: "#8a8f98", bookings: "#5cb85c",
+  flights: "#5ccbe4", food: "#e4664a", transport: "#4a90e2", lodging: "#9b6fd6",
+  activities: "#e4b34a", shopping: "#d64f9b", other: "#8a8f98",
+};
+
+/** Booked items count toward the same categories as manual expenses. */
+const BOOKING_KIND_CAT: Record<string, string> = {
+  flight: "flights", stay: "lodging", train: "transport", bus: "transport",
+  ferry: "transport", car: "transport", activity: "activities", other: "other",
 };
 
 export default function ExpensesTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
@@ -36,13 +42,22 @@ export default function ExpensesTab({ detail, refresh }: { detail: TripDetail; r
 
   const byCategory: Record<string, number> = {};
   for (const e of expenses) byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
-  if (bookingsTotal > 0) byCategory["bookings"] = bookingsTotal;
+  for (const b of bookings) {
+    if (!b.cost) continue;
+    const cat = BOOKING_KIND_CAT[b.kind] || "other";
+    byCategory[cat] = (byCategory[cat] || 0) + b.cost;
+  }
 
   const byCity: Record<string, number> = {};
   const legName = new Map(legs.map((l) => [l.id, l.city]));
   for (const e of expenses) {
-    const city = (e.leg_id != null && legName.get(e.leg_id)) || "General";
+    const city = (e.leg_id != null && legName.get(e.leg_id)) || "🌍 Trip-wide";
     byCity[city] = (byCity[city] || 0) + e.amount;
+  }
+  for (const b of bookings) {
+    if (!b.cost) continue;
+    const city = (b.leg_id != null && legName.get(b.leg_id)) || "🌍 Trip-wide";
+    byCity[city] = (byCity[city] || 0) + b.cost;
   }
 
   const budget = trip.budget || 0;
@@ -97,9 +112,13 @@ export default function ExpensesTab({ detail, refresh }: { detail: TripDetail; r
               <span className="exp-amt">{amt.toFixed(0)}</span>
             </div>
           ))}
-          {expenses.length === 0 && <p className="hint">Nothing yet.</p>}
+          {Object.keys(byCity).length === 0 && <p className="hint">Nothing yet.</p>}
         </div>
       </div>
+      <p className="hint">
+        Flights and other whole-trip costs don't belong to one city — leave the city as "🌍 Trip-wide".
+        Works the same for round trips from home (e.g. TLV) and for one-way backpacking routes.
+      </p>
 
       <h2>Expenses</h2>
       <div className="add-row">
@@ -111,7 +130,7 @@ export default function ExpensesTab({ detail, refresh }: { detail: TripDetail; r
           {CATS.map((c) => <option key={c}>{c}</option>)}
         </select>
         <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
-          <option value="">City…</option>
+          <option value="">🌍 Trip-wide (flights, insurance…)</option>
           {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
         </select>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />

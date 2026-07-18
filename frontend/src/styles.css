@@ -197,6 +197,24 @@ a { color: var(--accent); }
 .exp-bar { height: 100%; background: var(--accent); border-radius: 5px; }
 .exp-amt { width: 60px; font-size: 12px; font-variant-numeric: tabular-nums; }
 
+/* LLM usage chart */
+.usage-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 110px; margin: 10px 0 4px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.usage-col {
+  flex: 1; max-width: 34px; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch;
+}
+.usage-bar { border-radius: 2px 2px 0 0; min-height: 1px; }
+.usage-bar.in { background: var(--accent); }
+.usage-bar.out { background: #5cb85c; }
+.usage-day { font-size: 9px; color: var(--muted); text-align: center; margin-top: 2px; }
+.row.wrap { flex-wrap: wrap; align-items: flex-end; }
+.row.wrap label.block { flex: 1; min-width: 140px; }
+details summary { cursor: pointer; margin: 8px 0 4px; }
+
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
