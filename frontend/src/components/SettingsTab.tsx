@@ -38,6 +38,12 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
       const r = await api.post<{ models: string[] }>("/llm/models", { provider, api_key: apiKey });
       setModelList(r.models);
       setManualModel(false);
+      // Keep state in sync with what the dropdown will display — otherwise Save
+      // stores a stale/default model even though the UI shows a valid one.
+      if (r.models.length > 0 && !r.models.includes(model)) {
+        const def = settings?.default_models?.[provider];
+        setModel(def && r.models.includes(def) ? def : r.models[0]);
+      }
       if (r.models.length === 0) setStatus("Provider returned no models for this key.");
     } catch (e: any) {
       setStatus(`❌ ${e.message}`);
@@ -62,6 +68,8 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
     setTesting(true);
     setStatus(null);
     try {
+      // Test what's on screen, not what was saved earlier.
+      await save();
       const r = await api.post<{ ok: boolean; model: string; reply: string }>("/settings/test");
       setStatus(`✅ Connected — ${r.model} replied "${r.reply}"`);
     } catch (e: any) {
@@ -93,7 +101,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
       </label>
       <label className="block">Model <span className="hint">(default: {settings?.default_models?.[provider]})</span>
         {modelList.length > 0 && !manualModel ? (
-          <select value={model || settings?.default_models?.[provider] || ""} onChange={(e) => setModel(e.target.value)}>
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
             {model && !modelList.includes(model) && <option value={model}>{model} (current)</option>}
             {modelList.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>

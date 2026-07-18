@@ -9,7 +9,8 @@ export type LlmConfig = {
 export const DEFAULT_MODELS: Record<LlmConfig["provider"], string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-4o",
-  gemini: "gemini-2.5-flash",
+  // Evergreen alias — Google retires pinned versions (e.g. 2.5) for new users.
+  gemini: "gemini-flash-latest",
   openrouter: "anthropic/claude-sonnet-4.5",
 };
 
