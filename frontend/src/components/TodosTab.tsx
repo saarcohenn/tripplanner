@@ -45,7 +45,7 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
       {open.map((t) => (
         <div className="todo" key={t.id}>
           <input type="checkbox" checked={false} onChange={() => toggle(t)} />
-          <span dir="auto" className="grow">{t.text}</span>
+          <span dir="auto" className="grow">{t.source === "ai" && <span title="Extracted by AI from your conversation">✨ </span>}{t.text}</span>
           <span className={`chip cat-${t.category}`}>{t.category}</span>
           {t.due_date && <span className="hint">{t.due_date}</span>}
           <button className="danger small" onClick={() => remove(t)}>✕</button>

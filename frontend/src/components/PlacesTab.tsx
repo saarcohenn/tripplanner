@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
@@ -16,10 +16,26 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [form, setForm] = useState({ name: "", leg_id: "" as number | "", category: "sight", duration_min: 90, priority: "want", notes: "" });
   const [fetchingPhotos, setFetchingPhotos] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
+  const autoFetchedTrip = useRef<number | null>(null);
+
+  // Auto-fetch missing photos once per trip when the page renders with a Maps key.
+  useEffect(() => {
+    if (!gmapsKey || fetchingPhotos) return;
+    if (autoFetchedTrip.current === trip.id) return;
+    if (!places.some((p) => !p.photo_ref)) return;
+    autoFetchedTrip.current = trip.id;
+    setFetchingPhotos(true);
+    api.post<{ updated: number }>(`/trips/${trip.id}/fetch-photos`)
+      .then((r) => { if (r.updated > 0) return refresh(); })
+      .catch(() => {})
+      .finally(() => setFetchingPhotos(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip.id, gmapsKey, places]);
 
   async function doAdd() {
     await api.post(`/trips/${trip.id}/places`, { ...form, leg_id: form.leg_id === "" ? null : form.leg_id });
     setForm({ ...form, name: "", notes: "" });
+    autoFetchedTrip.current = null; // let the new place pick up a photo
     await refresh();
   }
 
@@ -37,18 +53,6 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     if (c === "cancel") return;
     await doAdd();
     if (c === "add_regen") await generatePlan();
-  }
-
-  async function fetchPhotos() {
-    setFetchingPhotos(true);
-    try {
-      await api.post<{ updated: number }>(`/trips/${trip.id}/fetch-photos`);
-      await refresh();
-    } catch (e: any) {
-      window.alert(e.message);
-    } finally {
-      setFetchingPhotos(false);
-    }
   }
 
   async function patch(p: Place, patchObj: Partial<Place>) {
@@ -77,11 +81,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
       <div className="row spread">
         <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
-        {gmapsKey && (
-          <button onClick={fetchPhotos} disabled={fetchingPhotos} title="Look up Google Maps photos for places that don't have one">
-            {fetchingPhotos ? "Fetching…" : "📷 Fetch photos"}
-          </button>
-        )}
+        {fetchingPhotos && <span className="hint">📷 Fetching photos…</span>}
       </div>
       <div className="add-row">
         <input dir="auto" placeholder="Place name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -103,39 +103,45 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
         <div key={g.label}>
           <h3 dir="auto">{g.label}</h3>
           {g.items.length === 0 && <p className="hint">No places yet — add them here or from the Map tab.</p>}
-          <table className="table">
-            <tbody>
-              {g.items.map((p) => (
-                <tr key={p.id} className={p.status === "dropped" ? "dropped" : ""}>
-                  <td className="thumb-cell">
-                    {p.photo_ref ? <img className="place-thumb" src={`/api/places/${p.id}/photo`} alt="" loading="lazy" /> : <span className="place-thumb empty">🏞️</span>}
-                  </td>
-                  <td dir="auto" className="grow"><strong>{p.name}</strong>{p.notes && <div className="hint" dir="auto">{p.notes}</div>}</td>
-                  <td>
+          <div className="place-grid">
+            {g.items.map((p) => (
+              <div key={p.id} className={`pcard ${p.status === "dropped" ? "dropped" : ""}`}>
+                {p.photo_ref
+                  ? <img className="pcard-img" src={`/api/places/${p.id}/photo`} alt={p.name} loading="lazy" />
+                  : <div className="pcard-img empty">🏞️</div>}
+                <div className="pcard-body">
+                  <div className="row spread">
+                    <strong dir="auto">{p.name}</strong>
+                    <a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps">🗺️</a>
+                  </div>
+                  {p.notes && (
+                    <div className="hint" dir="auto">
+                      {p.source === "ai" && <span title="Extracted by AI from your conversation">✨ </span>}
+                      {p.notes}
+                    </div>
+                  )}
+                  <div className="pcard-controls">
                     <select value={p.category} onChange={(e) => patch(p, { category: e.target.value })}>
                       {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                     </select>
-                  </td>
-                  <td>
                     <select value={p.priority} onChange={(e) => patch(p, { priority: e.target.value as any })}>
                       <option value="must">must</option><option value="want">want</option><option value="maybe">maybe</option>
                     </select>
-                  </td>
-                  <td className="nowrap">
-                    <input type="number" value={p.duration_min} style={{ width: 60 }}
-                      onChange={(e) => patch(p, { duration_min: Number(e.target.value) })} /> min
-                  </td>
-                  <td><a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps">🗺️</a></td>
-                  <td className="nowrap">
+                    <span className="nowrap">
+                      <input type="number" value={p.duration_min} style={{ width: 58 }}
+                        onChange={(e) => patch(p, { duration_min: Number(e.target.value) })} /> min
+                    </span>
+                  </div>
+                  <div className="row pcard-actions">
                     {p.status === "active"
                       ? <button className="small" title="Drop from plan (keep in list)" onClick={() => patch(p, { status: "dropped" })}>Drop</button>
                       : <button className="small" title="Restore to plan" onClick={() => patch(p, { status: "active" })}>Restore</button>}
-                    <button className="danger small" onClick={() => remove(p)}>✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <button className="danger small" onClick={() => remove(p)}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </div>

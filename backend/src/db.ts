@@ -126,6 +126,10 @@ function addColumn(table: string, ddl: string) {
 addColumn("trips", "stage TEXT NOT NULL DEFAULT 'collect'"); // collect | planned
 addColumn("places", "google_place_id TEXT DEFAULT ''");
 addColumn("places", "photo_ref TEXT DEFAULT ''");
+// Whether a row was typed by the user or extracted by the LLM (conversation import).
+addColumn("places", "source TEXT DEFAULT 'user'");
+addColumn("todos", "source TEXT DEFAULT 'user'");
+addColumn("bookings", "source TEXT DEFAULT 'user'");
 
 export function bumpPlanVersion(tripId: number) {
   db.prepare(

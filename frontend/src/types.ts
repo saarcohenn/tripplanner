@@ -42,6 +42,7 @@ export type Place = {
   gmaps_url: string;
   google_place_id: string;
   photo_ref: string;
+  source: "user" | "ai";
 };
 
 export type Expense = {
@@ -63,6 +64,7 @@ export type Todo = {
   category: string;
   due_date: string | null;
   done: number;
+  source: "user" | "ai";
 };
 
 export type Booking = {
@@ -78,6 +80,7 @@ export type Booking = {
   cost: number | null;
   currency: string;
   notes: string;
+  source: "user" | "ai";
 };
 
 export type PlanItem = {

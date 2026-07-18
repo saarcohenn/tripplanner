@@ -172,7 +172,7 @@ api.post("/import/conversation", wrap(async (req, res) => {
     });
     for (const pl of t.places || []) {
       db.prepare(
-        `INSERT INTO places (trip_id, leg_id, name, category, lat, lng, duration_min, priority, notes) VALUES (?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO places (trip_id, leg_id, name, category, lat, lng, duration_min, priority, notes, source) VALUES (?,?,?,?,?,?,?,?,?,'ai')`
       ).run(
         tripId, legIdByCity.get((pl.city || "").toLowerCase()) ?? null, pl.name || "Unnamed",
         pl.category || "sight", pl.lat ?? null, pl.lng ?? null, pl.duration_min ?? 90,
@@ -180,12 +180,12 @@ api.post("/import/conversation", wrap(async (req, res) => {
       );
     }
     for (const td of t.todos || []) {
-      db.prepare(`INSERT INTO todos (trip_id, text, category, due_date) VALUES (?,?,?,?)`)
+      db.prepare(`INSERT INTO todos (trip_id, text, category, due_date, source) VALUES (?,?,?,?,'ai')`)
         .run(tripId, td.text || "?", td.category || "general", td.due_date ?? null);
     }
     for (const bk of t.bookings || []) {
       db.prepare(
-        `INSERT INTO bookings (trip_id, leg_id, kind, title, date, end_date, cost, notes) VALUES (?,?,?,?,?,?,?,?)`
+        `INSERT INTO bookings (trip_id, leg_id, kind, title, date, end_date, cost, notes, source) VALUES (?,?,?,?,?,?,?,?,'ai')`
       ).run(
         tripId, legIdByCity.get((bk.city || "").toLowerCase()) ?? null, bk.kind || "other",
         bk.title || "?", bk.date ?? null, bk.end_date ?? null, bk.cost ?? null, bk.notes ?? ""

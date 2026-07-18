@@ -80,7 +80,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, busy 
                       <em className="hint"> (dropped — regenerate)</em>
                     )}
                     {it.details && <div className="item-details" dir="auto">{it.details}</div>}
-                    {it.tip && <div className="item-tip" dir="auto">💡 {it.tip}</div>}
+                    {it.tip && <div className="item-tip" dir="auto" title="AI suggestion">✨ {it.tip}</div>}
                   </span>
                   <span className="hint">{it.duration_min ? `${it.duration_min}m` : ""}</span>
                 </li>
@@ -98,7 +98,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, busy 
 
       <aside className="advisor">
         <div className="row spread">
-          <h2>🧠 Advisor</h2>
+          <h2>✨ Advisor</h2>
           <button className="small" onClick={reAdvise} disabled={!llmReady || advising}>{advising ? "…" : "Re-analyze"}</button>
         </div>
         <p className="hint">The advisor never suggests new places — it only tells you what to drop, when to rest, and when you'll have to get up early.</p>

@@ -145,6 +145,7 @@ a { color: var(--accent-dark); }
 .table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: var(--card-tint); }
 .table tr.dropped { opacity: 0.45; }
 .table input, .table select { max-width: 140px; }
+.table input.grow { max-width: none; width: 100%; min-width: 160px; }
 
 .add-row {
   display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0;
@@ -233,6 +234,29 @@ a { color: var(--accent-dark); }
 .item.kind-transit, .item.kind-flight { color: #a05a24; }
 .item-details { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
 .item-tip { font-size: 12px; color: var(--olive); margin-top: 2px; }
+
+/* ---------- place cards ---------- */
+.place-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px; margin: 10px 0 22px;
+}
+.pcard {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+}
+.pcard.dropped { opacity: 0.5; }
+.pcard-img { width: 100%; height: 160px; object-fit: cover; display: block; }
+.pcard-img.empty {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; background: var(--card-tint); color: var(--muted);
+}
+.pcard-body { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.pcard-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pcard-controls select, .pcard-controls input { font-size: 12px; padding: 5px 7px; }
+.pcard-actions { margin-top: auto; }
+
+input.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
+input.subtle:hover, input.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
 
 /* ---------- expenses ---------- */
 .exp-summary {
@@ -342,6 +366,10 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 
   /* Wide tables scroll sideways instead of breaking the page */
   .table { display: block; overflow-x: auto; }
+
+  /* Place cards: full-width with an even bigger photo on phones */
+  .place-grid { grid-template-columns: 1fr; }
+  .pcard-img { height: 190px; }
 
   /* 16px inputs stop iOS Safari from auto-zooming on focus */
   input, select, textarea { font-size: 16px; }

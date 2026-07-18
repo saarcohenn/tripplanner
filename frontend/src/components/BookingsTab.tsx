@@ -37,6 +37,11 @@ export default function BookingsTab({ detail, refresh }: { detail: TripDetail; r
     await refresh();
   }
 
+  async function patch(b: Booking, patchObj: Partial<Booking>) {
+    await api.put(`/bookings/${b.id}`, patchObj);
+    await refresh();
+  }
+
   async function remove(b: Booking) {
     if (!window.confirm(`Delete booking "${b.title}"?`)) return;
     await api.del(`/bookings/${b.id}`);
@@ -79,19 +84,44 @@ export default function BookingsTab({ detail, refresh }: { detail: TripDetail; r
         <tbody>
           {bookings.map((b) => (
             <tr key={b.id}>
-              <td>{b.kind}</td>
-              <td dir="auto" className="grow">
-                {b.url ? <a href={b.url} target="_blank" rel="noreferrer">{b.title} ↗</a> : b.title}
-                {b.notes && <div className="hint" dir="auto">{b.notes}</div>}
+              <td>
+                <select value={b.kind} onChange={(e) => patch(b, { kind: e.target.value })}>
+                  {KINDS.map((k) => <option key={k}>{k}</option>)}
+                </select>
               </td>
-              <td className="nowrap">{b.date}{b.end_date ? ` → ${b.end_date}` : ""}</td>
-              <td className="nowrap">{b.cost != null ? `${b.cost} ${b.currency}` : ""}</td>
+              <td dir="auto" className="grow">
+                <div className="row">
+                  <input dir="auto" className="grow" defaultValue={b.title}
+                    onBlur={(e) => e.target.value !== b.title && patch(b, { title: e.target.value })} />
+                  {b.url && <a href={b.url} target="_blank" rel="noreferrer" title="Open booking">↗</a>}
+                </div>
+                <div className="row" style={{ marginTop: 4 }}>
+                  {b.source === "ai" && <span title="Extracted by AI from your conversation — double-check it">✨</span>}
+                  <input dir="auto" className="grow subtle" placeholder="Comment…" defaultValue={b.notes}
+                    onBlur={(e) => e.target.value !== b.notes && patch(b, { notes: e.target.value })} />
+                </div>
+              </td>
+              <td>
+                <select value={b.leg_id ?? ""} onChange={(e) => patch(b, { leg_id: e.target.value === "" ? null : Number(e.target.value) })}>
+                  <option value="">🌍</option>
+                  {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
+                </select>
+              </td>
+              <td><input type="date" defaultValue={b.date ?? ""} onBlur={(e) => e.target.value !== (b.date ?? "") && patch(b, { date: e.target.value || null })} /></td>
+              <td><input type="date" defaultValue={b.end_date ?? ""} onBlur={(e) => e.target.value !== (b.end_date ?? "") && patch(b, { end_date: e.target.value || null })} /></td>
+              <td>
+                <input type="number" style={{ width: 80 }} placeholder="Cost" defaultValue={b.cost ?? ""}
+                  onBlur={(e) => e.target.value !== String(b.cost ?? "") && patch(b, { cost: e.target.value === "" ? null : Number(e.target.value) })} /> {b.currency}
+              </td>
+              <td><input placeholder="URL" style={{ width: 90 }} defaultValue={b.url}
+                onBlur={(e) => e.target.value !== b.url && patch(b, { url: e.target.value })} /></td>
               <td><button className="danger small" onClick={() => remove(b)}>✕</button></td>
             </tr>
           ))}
         </tbody>
       </table>
       {bookings.length === 0 && <p className="hint">No bookings recorded yet.</p>}
+      {bookings.length > 0 && <p className="hint">Click any field to edit — changes save when you leave the field. ✨ marks AI-extracted entries.</p>}
     </div>
   );
 }
