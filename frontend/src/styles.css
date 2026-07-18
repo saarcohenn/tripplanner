@@ -1,13 +1,16 @@
+/* Warm palette: #374001 olive · #e88005 orange · #5a1903 brown · #e86431 coral · #e8412f red · #fff */
 :root {
-  --bg: #12141a;
-  --panel: #1a1e27;
-  --panel2: #222836;
-  --border: #2e3648;
-  --text: #e8eaf0;
-  --muted: #8a92a6;
-  --accent: #4a90e2;
-  --danger: #d9534f;
-  --warn: #e4b34a;
+  --bg: #201004;
+  --panel: #2c1608;
+  --panel2: #3e1f0b;
+  --border: #5a2c12;
+  --text: #fff6ec;
+  --muted: #d8a678;
+  --accent: #e88005;
+  --coral: #e86431;
+  --olive: #a2b025;
+  --danger: #e8412f;
+  --warn: #e86431;
 }
 
 * { box-sizing: border-box; }
@@ -80,9 +83,9 @@ label.block.row > input { width: auto; display: inline; }
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 
 .banner { padding: 9px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
-.banner.error { background: #3a2023; color: #f0b6b3; cursor: pointer; }
-.banner.warn { background: #383017; color: #ecd9a0; }
-.banner.busy { background: #1c2c40; color: #a9c8ec; }
+.banner.error { background: #4a1410; color: #f6b3ab; cursor: pointer; }
+.banner.warn { background: #45220a; color: #f5c793; }
+.banner.busy { background: #3a2508; color: #f0c48d; }
 
 .hint { color: var(--muted); font-size: 12px; }
 .alert {
@@ -90,8 +93,8 @@ label.block.row > input { width: auto; display: inline; }
   padding: 7px 10px; border-radius: 4px; margin: 6px 0; font-size: 13px;
 }
 .alert.type-overload { border-left-color: var(--danger); }
-.alert.type-early_wake { border-left-color: var(--warn); }
-.alert.type-rest_needed { border-left-color: #5cb85c; }
+.alert.type-early_wake { border-left-color: var(--accent); }
+.alert.type-rest_needed { border-left-color: var(--olive); }
 .alert.small { font-size: 12px; padding: 4px 8px; }
 
 .table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; }
@@ -146,10 +149,10 @@ label.block.row > input { width: auto; display: inline; }
 .wake { margin-left: auto; font-size: 12px; color: var(--muted); }
 .wake.early { color: var(--warn); font-weight: 600; }
 .items { list-style: none; padding: 0; margin: 8px 0 0; }
-.item { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; border-bottom: 1px dashed #232a3a; }
+.item { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; border-bottom: 1px dashed #4a2711; }
 .item .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; }
-.item.kind-rest { color: #8fd19e; }
-.item.kind-transit, .item.kind-flight { color: #9ec1ec; }
+.item.kind-rest { color: #c8d465; }
+.item.kind-transit, .item.kind-flight { color: #f2b877; }
 
 h2 { font-size: 16px; margin: 14px 0 8px; }
 h3 { font-size: 13px; margin: 14px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
@@ -160,7 +163,7 @@ a { color: var(--accent); }
   display: inline-block; width: 9px; height: 9px; border-radius: 50%;
   background: var(--muted); margin-right: 7px; opacity: 0.6;
 }
-.stage-dot.planned { background: #4caf50; opacity: 1; box-shadow: 0 0 5px #4caf5088; }
+.stage-dot.planned { background: var(--olive); opacity: 1; box-shadow: 0 0 5px #a2b02588; }
 
 /* Place photos */
 .thumb-cell { width: 64px; }
@@ -180,7 +183,7 @@ a { color: var(--accent); }
 .alarm + .wake { margin-left: 10px; }
 .alarm-reason { font-size: 12px; color: var(--warn); margin-top: 2px; }
 .item-details { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.item-tip { font-size: 12px; color: #8fd19e; margin-top: 2px; }
+.item-tip { font-size: 12px; color: #c8d465; margin-top: 2px; }
 
 /* Expenses */
 .exp-summary { display: flex; gap: 24px; align-items: center; margin: 10px 0 18px; flex-wrap: wrap; }
@@ -209,7 +212,7 @@ a { color: var(--accent); }
 }
 .usage-bar { border-radius: 2px 2px 0 0; min-height: 1px; }
 .usage-bar.in { background: var(--accent); }
-.usage-bar.out { background: #5cb85c; }
+.usage-bar.out { background: var(--olive); }
 .usage-day { font-size: 9px; color: var(--muted); text-align: center; margin-top: 2px; }
 .row.wrap { flex-wrap: wrap; align-items: flex-end; }
 .row.wrap label.block { flex: 1; min-width: 140px; }

@@ -10,8 +10,8 @@ type Pending = { lat: number; lng: number; name: string; google_place_id?: strin
 type SearchResult = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  sight: "#e4b34a", food: "#e4664a", nature: "#5cb85c", museum: "#9b6fd6",
-  shopping: "#4a90e2", nightlife: "#d64f9b", other: "#8a8f98",
+  sight: "#e88005", food: "#e8412f", nature: "#a2b025", museum: "#b4652e",
+  shopping: "#e86431", nightlife: "#c93b6e", other: "#a5917c",
 };
 
 const CIRCLE_PATH = "M 0,-8 a 8,8 0 1,0 0.001,0 z";

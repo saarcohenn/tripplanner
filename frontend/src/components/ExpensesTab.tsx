@@ -4,8 +4,8 @@ import type { Expense, TripDetail } from "../types";
 
 const CATS = ["flights", "food", "transport", "lodging", "activities", "shopping", "other"] as const;
 const CAT_COLORS: Record<string, string> = {
-  flights: "#5ccbe4", food: "#e4664a", transport: "#4a90e2", lodging: "#9b6fd6",
-  activities: "#e4b34a", shopping: "#d64f9b", other: "#8a8f98",
+  flights: "#e86431", food: "#e8412f", transport: "#e88005", lodging: "#b4652e",
+  activities: "#f0a41c", shopping: "#c93b6e", other: "#a5917c",
 };
 
 /** Booked items count toward the same categories as manual expenses. */

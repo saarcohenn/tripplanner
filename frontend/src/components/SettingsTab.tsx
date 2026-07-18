@@ -124,7 +124,7 @@ function UsageSection({ usage, priceIn, setPriceIn, priceOut, setPriceOut, month
               </div>
             ))}
           </div>
-          <p className="hint"><span className="dot" style={{ background: "var(--accent)" }} /> input tokens <span className="dot" style={{ background: "#5cb85c", marginLeft: 10 }} /> output tokens — last 30 days</p>
+          <p className="hint"><span className="dot" style={{ background: "var(--accent)" }} /> input tokens <span className="dot" style={{ background: "var(--olive)", marginLeft: 10 }} /> output tokens — last 30 days</p>
           <details>
             <summary className="hint">Recent calls</summary>
             <table className="table">
