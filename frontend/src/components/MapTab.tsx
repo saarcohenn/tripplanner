@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from "react-leaflet";
 import type { LatLngExpression } from "leaflet";
 import { APIProvider, Map as GMap, Marker, InfoWindow } from "@vis.gl/react-google-maps";
@@ -36,6 +36,16 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
   const [searching, setSearching] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
+  const [googleFailed, setGoogleFailed] = useState(false);
+
+  // Google Maps reports auth problems (key invalid, API not enabled, billing off,
+  // referrer blocked) via this global callback — fall back to OpenStreetMap.
+  useEffect(() => {
+    (window as any).gm_authFailure = () => setGoogleFailed(true);
+    return () => { delete (window as any).gm_authFailure; };
+  }, []);
+
+  const useGoogle = !!gmapsKey && !googleFailed;
 
   const center = useMemo(() => {
     const withCoords = places.filter((p) => p.lat != null && p.lng != null);
@@ -170,6 +180,13 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
         {!gmapsKey && (
           <p className="hint">💡 Add a Google Maps API key in Settings to switch to Google Maps with English labels, English search results and place photos.</p>
         )}
+        {gmapsKey && googleFailed && (
+          <div className="alert">
+            ⚠ Google rejected the Maps key, showing the OpenStreetMap fallback instead. Open the browser
+            console (F12) for the exact reason — usually "Maps JavaScript API" isn't enabled on the key's
+            Google Cloud project, or billing/referrer restrictions block it.
+          </div>
+        )}
         <p className="hint">Click anywhere on the map to pin a new place. Changes mark the daily plan as outdated.</p>
         <ul className="legend">
           {Object.entries(CATEGORY_COLORS).map(([k, c]) => (
@@ -178,8 +195,8 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
         </ul>
       </div>
 
-      {gmapsKey ? (
-        <APIProvider apiKey={gmapsKey} language="en">
+      {useGoogle ? (
+        <APIProvider apiKey={gmapsKey!} language="en">
           <GMap
             style={{ flex: 1 }}
             defaultCenter={center}
