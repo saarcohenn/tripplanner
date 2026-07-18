@@ -343,6 +343,41 @@ api.post("/settings/test", wrap(async (_req, res) => {
   res.json({ ok: true, model: cfg.model, reply: reply.trim().slice(0, 100) });
 }));
 
+// Ask the provider itself about the key's budget/spend. Only OpenRouter exposes this.
+api.get("/llm/provider-plan", wrap(async (_req, res) => {
+  const provider = getSetting("llm_provider") || "anthropic";
+  const key = getSetting("llm_api_key") || "";
+  if (!key) throw Object.assign(new Error("Save an API key first"), { status: 400 });
+  if (provider !== "openrouter") {
+    throw Object.assign(
+      new Error("Only OpenRouter exposes billing via its API. For other providers check their billing console (or use the manual $/1M fields below)."),
+      { status: 400 }
+    );
+  }
+  const auth = { authorization: `Bearer ${key}` };
+  const keyRes = await fetch("https://openrouter.ai/api/v1/key", { headers: auth });
+  const keyText = await keyRes.text();
+  if (!keyRes.ok) {
+    throw Object.assign(new Error(`OpenRouter rejected the key (${keyRes.status}): ${keyText.slice(0, 200)}`), { status: 502 });
+  }
+  const k = JSON.parse(keyText).data || {};
+  // Account-level credits; may be unavailable for some key types — tolerate failure.
+  let credits: { total_credits: number; total_usage: number } | null = null;
+  try {
+    const credRes = await fetch("https://openrouter.ai/api/v1/credits", { headers: auth });
+    if (credRes.ok) credits = ((await credRes.json()) as any).data ?? null;
+  } catch { /* optional */ }
+  res.json({
+    label: k.label ?? "",
+    is_free_tier: !!k.is_free_tier,
+    key_usage_usd: k.usage ?? 0,
+    key_limit_usd: k.limit ?? null,
+    key_remaining_usd: k.limit != null ? Math.max(0, k.limit - (k.usage ?? 0)) : null,
+    account_credits_usd: credits?.total_credits ?? null,
+    account_usage_usd: credits?.total_usage ?? null,
+  });
+}));
+
 // ---------- LLM usage / billing ----------
 api.get("/llm/usage", wrap((_req, res) => {
   const days = db.prepare(

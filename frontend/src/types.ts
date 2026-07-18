@@ -152,6 +152,16 @@ export type LlmUsageRow = {
   id: number; ts: string; provider: string; model: string; purpose: string;
   input_tokens: number; output_tokens: number;
 };
+export type ProviderPlan = {
+  label: string;
+  is_free_tier: boolean;
+  key_usage_usd: number;
+  key_limit_usd: number | null;
+  key_remaining_usd: number | null;
+  account_credits_usd: number | null;
+  account_usage_usd: number | null;
+};
+
 export type LlmUsage = {
   days: LlmUsageDay[];
   month: { input_tokens: number; output_tokens: number; calls: number };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { LlmUsage, Settings } from "../types";
+import type { LlmUsage, ProviderPlan, Settings } from "../types";
 
 const PROVIDERS = [
   { id: "anthropic", label: "Anthropic (Claude)" },
@@ -8,6 +8,10 @@ const PROVIDERS = [
   { id: "gemini", label: "Google (Gemini)" },
   { id: "openrouter", label: "OpenRouter" },
 ];
+
+function fmtUsd(v: number): string {
+  return "$" + (v > 0 && v < 0.01 ? v.toFixed(4) : v.toFixed(2));
+}
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -21,6 +25,22 @@ function UsageSection({ usage, priceIn, setPriceIn, priceOut, setPriceOut, month
   priceOut: string; setPriceOut: (v: string) => void;
   monthlyBudget: string; setMonthlyBudget: (v: string) => void;
 }) {
+  const [plan, setPlan] = useState<ProviderPlan | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [checkingPlan, setCheckingPlan] = useState(false);
+
+  async function checkPlan() {
+    setCheckingPlan(true);
+    setPlanError(null);
+    try {
+      setPlan(await api.get<ProviderPlan>("/llm/provider-plan"));
+    } catch (e: any) {
+      setPlan(null);
+      setPlanError(e.message);
+    } finally {
+      setCheckingPlan(false);
+    }
+  }
   const pin = parseFloat(priceIn) || 0;
   const pout = parseFloat(priceOut) || 0;
   const budget = parseFloat(monthlyBudget) || 0;
@@ -28,9 +48,52 @@ function UsageSection({ usage, priceIn, setPriceIn, priceOut, setPriceOut, month
   const monthCost = usage ? (usage.month.input_tokens / 1e6) * pin + (usage.month.output_tokens / 1e6) * pout : 0;
   const maxDay = Math.max(1, ...(usage?.days || []).map((d) => d.input_tokens + d.output_tokens));
 
+  const planPct =
+    plan && plan.key_limit_usd != null && plan.key_limit_usd > 0
+      ? (plan.key_usage_usd / plan.key_limit_usd) * 100
+      : null;
+
   return (
     <>
-      <h2>LLM usage &amp; billing</h2>
+      <div className="row spread">
+        <h2>LLM usage &amp; billing</h2>
+        <button onClick={checkPlan} disabled={checkingPlan}>
+          {checkingPlan ? "Checking…" : "Check provider plan"}
+        </button>
+      </div>
+      {planError && <div className="alert">{planError}</div>}
+      {plan && (
+        <div className="plan-card">
+          <div>
+            <strong>OpenRouter key{plan.label ? ` "${plan.label}"` : ""}</strong>
+            {plan.is_free_tier && <span className="chip" style={{ marginLeft: 8 }}>free tier</span>}
+          </div>
+          <div className="row wrap plan-stats">
+            <div className="exp-stat">
+              <div className="exp-num">{fmtUsd(plan.key_usage_usd)}</div>
+              <div className="hint">spent with this key</div>
+            </div>
+            <div className="exp-stat">
+              <div className="exp-num">{plan.key_limit_usd != null ? fmtUsd(plan.key_limit_usd) : "∞"}</div>
+              <div className="hint">key limit</div>
+            </div>
+            {plan.account_credits_usd != null && (
+              <div className="exp-stat">
+                <div className="exp-num">{fmtUsd(plan.account_credits_usd - (plan.account_usage_usd ?? 0))}</div>
+                <div className="hint">account credits left ({fmtUsd(plan.account_usage_usd ?? 0)} used of {fmtUsd(plan.account_credits_usd)})</div>
+              </div>
+            )}
+          </div>
+          {planPct != null && (
+            <>
+              <div className="budget-bar">
+                <div className={`budget-fill ${planPct > 100 ? "over" : ""}`} style={{ width: `${Math.min(100, planPct)}%` }} />
+              </div>
+              <p className="hint">{planPct.toFixed(0)}% of the key's limit used</p>
+            </>
+          )}
+        </div>
+      )}
       {!usage || usage.totals.calls === 0 ? (
         <p className="hint">No LLM calls recorded yet — usage appears here after you generate a plan, import a conversation or run a test.</p>
       ) : (

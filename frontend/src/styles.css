@@ -215,6 +215,12 @@ a { color: var(--accent); }
 .row.wrap label.block { flex: 1; min-width: 140px; }
 details summary { cursor: pointer; margin: 8px 0 4px; }
 
+.plan-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.plan-stats { gap: 24px; }
+
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
