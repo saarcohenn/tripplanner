@@ -57,6 +57,7 @@ body {
 
 /* ---------- main frame + tabs ---------- */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.tabs-wrap { position: relative; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 18px 4px; }
 .tab {
   background: none; border: none; color: var(--muted); padding: 8px 15px;
@@ -65,7 +66,8 @@ body {
 .tab:hover { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(232, 128, 5, 0.35); }
 
-.main > div:not(.banner), .pad { overflow-y: auto; }
+.main > div:not(.banner):not(.tabs-wrap), .pad { overflow-y: auto; }
+.tabs-wrap { flex: 0 0 auto; }
 .pad { padding: 14px 22px 28px; }
 .narrow { max-width: 760px; }
 
@@ -334,6 +336,31 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 .modal p { margin: 0 0 16px; font-size: 13px; }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ---------- mobile menu drawer ---------- */
+.hamburger { display: none; }
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(51, 32, 15, 0.45); z-index: 1200;
+}
+.drawer {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 250px;
+  background: var(--card); box-shadow: var(--shadow-lg);
+  padding: 12px; padding-top: calc(12px + env(safe-area-inset-top));
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
+}
+.drawer h4 {
+  margin: 12px 4px 5px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--muted);
+}
+.drawer h4:first-child { margin-top: 4px; }
+.drawer-item {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  background: none; border: none; box-shadow: none;
+  padding: 10px 12px; border-radius: 10px; font-size: 14px; color: var(--text);
+}
+.drawer-item:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; }
+.drawer-item.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
+
 /* ---------- leaflet ---------- */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
 .leaflet-popup-content a { color: var(--accent-dark); }
@@ -348,21 +375,33 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
     padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top));
     border-right: none; border-bottom: 1px solid var(--border);
   }
-  .sidebar h1 { font-size: 15px; white-space: nowrap; }
+  .sidebar h1 { font-size: 15px; white-space: nowrap; margin: 0; line-height: 1; }
   .sidebar > button.primary { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .hamburger {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 6px 10px; font-size: 16px; line-height: 1; border-radius: 9px;
+  }
   .trip-list { display: flex; overflow-x: auto; scrollbar-width: none; }
   .trip-list::-webkit-scrollbar { display: none; }
   .trip-list li { flex: 0 0 auto; margin: 0 2px; }
   .trip-name { white-space: nowrap; padding: 6px 8px; font-size: 12px; }
   .sidebar-footer { display: none; }
 
-  /* Tabs: one scrollable row */
+  /* Tabs: one scrollable row with edge-fade hints that more pages are off-screen */
   .tabs { flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .tabs::-webkit-scrollbar { display: none; }
   .tab { white-space: nowrap; flex: 0 0 auto; }
+  .tabs-wrap::before, .tabs-wrap::after {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 34px;
+    pointer-events: none; z-index: 5; opacity: 1; transition: opacity 0.2s;
+  }
+  .tabs-wrap::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+  .tabs-wrap::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
+  .tabs-wrap.at-start::before { opacity: 0; }
+  .tabs-wrap.at-end::after { opacity: 0; }
 
   .pad { padding: 10px 12px calc(28px + env(safe-area-inset-bottom)); }
-  .banner { margin: 6px 12px 0; }
+  .banner { margin: 6px 12px 0; padding: 7px 12px; font-size: 12px; border-radius: 8px; }
 
   /* Stack the split layouts */
   .map-layout { flex-direction: column; }
