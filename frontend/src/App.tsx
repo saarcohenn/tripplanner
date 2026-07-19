@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { UIEvent } from "react";
 import { api } from "./api";
 import type { Settings, Trip, TripDetail } from "./types";
 import OverviewTab from "./components/OverviewTab";
@@ -14,6 +13,9 @@ import SettingsTab from "./components/SettingsTab";
 
 const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Settings"] as const;
 type Tab = (typeof TABS)[number];
+/** Pages scoped to the selected trip vs. app-wide pages (drawer groups them separately). */
+const TRIP_TABS: Tab[] = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses"];
+const APP_TABS: Tab[] = ["Import", "Settings"];
 
 export default function App() {
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -24,24 +26,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tabScroll, setTabScroll] = useState({ start: true, end: false });
   const replanTimer = useRef<number | null>(null);
-  const tabsRef = useRef<HTMLElement | null>(null);
-
-  // Keep the active pill visible in the scrollable tab row (no-op on desktop where tabs wrap).
-  useEffect(() => {
-    tabsRef.current?.querySelector(".tab.active")
-      ?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [tab]);
-
-  // Edge-fade hints for the horizontally scrolling tab row on phones.
-  const onTabsScroll = useCallback((e: UIEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    setTabScroll({
-      start: el.scrollLeft <= 4,
-      end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4,
-    });
-  }, []);
 
   const loadTrips = useCallback(async () => {
     const t = await api.get<Trip[]>("/trips");
@@ -117,6 +102,12 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <button className="hamburger" aria-label="Open menu" onClick={() => setMenuOpen(true)}>☰</button>
+        {/* Mobile top bar shows where you are (trip › page); the brand lives in the drawer */}
+        <div className="crumb" dir="auto">
+          {detail && !APP_TABS.includes(tab)
+            ? <>{detail.trip.name} <span className="crumb-sep">›</span> {tab}</>
+            : tab}
+        </div>
         <h1>🧭 TripPlanner</h1>
         <button className="primary" onClick={createTrip}>+ New trip</button>
         <ul className="trip-list">
@@ -141,39 +132,51 @@ export default function App() {
       {menuOpen && (
         <div className="drawer-overlay" onClick={() => setMenuOpen(false)}>
           <nav className="drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-head">
+              <button className="drawer-back" aria-label="Close menu" onClick={() => setMenuOpen(false)}>←</button>
+              <h1>🧭 TripPlanner</h1>
+            </div>
             <h4>Pages</h4>
-            {TABS.map((t) => (
+            {TRIP_TABS.map((t) => (
               <button key={t} className={t === tab ? "drawer-item active" : "drawer-item"}
                 onClick={() => { setTab(t); setMenuOpen(false); }}>{t}</button>
             ))}
             <h4>Trips</h4>
             {trips.map((t) => (
-              <button key={t.id} className={t.id === selectedId ? "drawer-item active" : "drawer-item"} dir="auto"
-                onClick={() => { setSelectedId(t.id); setMenuOpen(false); }}>
-                <span
-                  className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
-                  title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
-                />
-                {t.name}
-              </button>
+              <div className="drawer-trip" key={t.id}>
+                <button className={t.id === selectedId ? "drawer-item active" : "drawer-item"} dir="auto"
+                  onClick={() => { setSelectedId(t.id); setMenuOpen(false); }}>
+                  <span
+                    className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
+                    title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
+                  />
+                  {t.name}
+                </button>
+                <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
+              </div>
             ))}
             <button className="drawer-item" onClick={() => { setMenuOpen(false); void createTrip(); }}>＋ New trip</button>
+            <div className="drawer-app">
+              <h4>App</h4>
+              {APP_TABS.map((t) => (
+                <button key={t} className={t === tab ? "drawer-item active" : "drawer-item"}
+                  onClick={() => { setTab(t); setMenuOpen(false); }}>{t}</button>
+              ))}
+            </div>
           </nav>
         </div>
       )}
 
       <main className="main">
-        <div className={`tabs-wrap${tabScroll.start ? " at-start" : ""}${tabScroll.end ? " at-end" : ""}`}>
-          <nav className="tabs" ref={tabsRef} onScroll={onTabsScroll}>
-            {TABS.map((t) => (
-              <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>{t}</button>
-            ))}
-          </nav>
-        </div>
+        <nav className="tabs">
+          {TABS.map((t) => (
+            <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>{t}</button>
+          ))}
+        </nav>
 
         {error && <div className="banner error" onClick={() => setError(null)}>{error} ✕</div>}
         {busy && <div className="banner busy">⏳ {busy}</div>}
-        {planOutdated && !busy && detail && (
+        {planOutdated && !busy && detail && !APP_TABS.includes(tab) && (
           <div className="banner warn">
             Plan is out of date with your latest changes.
             {llmReady

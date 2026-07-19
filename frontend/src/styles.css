@@ -57,7 +57,6 @@ body {
 
 /* ---------- main frame + tabs ---------- */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.tabs-wrap { position: relative; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 18px 4px; }
 .tab {
   background: none; border: none; color: var(--muted); padding: 8px 15px;
@@ -66,8 +65,7 @@ body {
 .tab:hover { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(232, 128, 5, 0.35); }
 
-.main > div:not(.banner):not(.tabs-wrap), .pad { overflow-y: auto; }
-.tabs-wrap { flex: 0 0 auto; }
+.main > div:not(.banner), .pad { overflow-y: auto; }
 .pad { padding: 14px 22px 28px; }
 .narrow { max-width: 760px; }
 
@@ -338,6 +336,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 
 /* ---------- mobile menu drawer ---------- */
 .hamburger { display: none; }
+.crumb { display: none; }
 .drawer-overlay {
   position: fixed; inset: 0; background: rgba(51, 32, 15, 0.45); z-index: 1200;
 }
@@ -348,11 +347,21 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
   overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
 }
+.drawer-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 8px; border-bottom: 1px solid var(--border); }
+.drawer-head h1 { font-size: 16px; margin: 0; letter-spacing: -0.3px; }
+.drawer-back {
+  background: none; border: none; box-shadow: none; padding: 6px 10px;
+  font-size: 17px; line-height: 1; border-radius: 9px; color: var(--muted);
+}
+.drawer-back:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; color: var(--text); }
 .drawer h4 {
   margin: 12px 4px 5px; font-size: 11px; text-transform: uppercase;
   letter-spacing: 0.6px; color: var(--muted);
 }
-.drawer h4:first-child { margin-top: 4px; }
+.drawer-trip { display: flex; align-items: center; gap: 4px; }
+.drawer-trip .drawer-item { flex: 1; }
+.drawer-app { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
+.drawer-app h4 { margin-top: 0; }
 .drawer-item {
   display: flex; align-items: center; width: 100%; text-align: left;
   background: none; border: none; box-shadow: none;
@@ -369,36 +378,27 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 @media (max-width: 768px) {
   .app { flex-direction: column; height: 100dvh; }
 
-  /* Sidebar becomes a slim top bar: title + new-trip + horizontally scrolling trip chips */
+  /* Sidebar becomes a slim top bar: hamburger + "trip › page" breadcrumb.
+     Brand, new-trip and the trip switcher all live in the drawer. */
   .sidebar {
     width: 100%; min-width: 0; flex-direction: row; align-items: center; gap: 8px;
     padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top));
     border-right: none; border-bottom: 1px solid var(--border);
   }
-  .sidebar h1 { font-size: 15px; white-space: nowrap; margin: 0; line-height: 1; }
-  .sidebar > button.primary { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .sidebar h1, .sidebar > button.primary, .trip-list, .sidebar-footer { display: none; }
   .hamburger {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 6px 10px; font-size: 16px; line-height: 1; border-radius: 9px;
   }
-  .trip-list { display: flex; overflow-x: auto; scrollbar-width: none; }
-  .trip-list::-webkit-scrollbar { display: none; }
-  .trip-list li { flex: 0 0 auto; margin: 0 2px; }
-  .trip-name { white-space: nowrap; padding: 6px 8px; font-size: 12px; }
-  .sidebar-footer { display: none; }
-
-  /* Tabs: one scrollable row with edge-fade hints that more pages are off-screen */
-  .tabs { flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab { white-space: nowrap; flex: 0 0 auto; }
-  .tabs-wrap::before, .tabs-wrap::after {
-    content: ""; position: absolute; top: 0; bottom: 0; width: 34px;
-    pointer-events: none; z-index: 5; opacity: 1; transition: opacity 0.2s;
+  .crumb {
+    display: block; flex: 1; min-width: 0;
+    font-size: 14px; font-weight: 600; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .tabs-wrap::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
-  .tabs-wrap::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
-  .tabs-wrap.at-start::before { opacity: 0; }
-  .tabs-wrap.at-end::after { opacity: 0; }
+  .crumb-sep { color: var(--muted); font-weight: 400; margin: 0 2px; }
+
+  /* The drawer is the navigation on phones — no tab row */
+  .tabs { display: none; }
 
   .pad { padding: 10px 12px calc(28px + env(safe-area-inset-bottom)); }
   .banner { margin: 6px 12px 0; padding: 7px 12px; font-size: 12px; border-radius: 8px; }
