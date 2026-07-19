@@ -98,13 +98,13 @@ Tagged releases (`v*`) get version tags.
 GitHub's hosted runners can't reach a LAN server, so deployment uses a
 **self-hosted runner** on the box itself: [`deploy.yml`](.github/workflows/deploy.yml)
 waits for the image build to succeed, then runs `docker compose pull && up -d` in
-`~/tripplanner` on the server.
+`~/docker/tripplanner` on the server.
 
 One-time server setup:
 
 ```bash
 # on the server
-mkdir -p ~/tripplanner   # put the TL;DR docker-compose.yml + .env here
+mkdir -p ~/docker/tripplanner   # put the TL;DR docker-compose.yml + .env here
 # install a runner: GitHub repo → Settings → Actions → Runners → New self-hosted runner
 # (run it as a service: ./svc.sh install && ./svc.sh start)
 ```

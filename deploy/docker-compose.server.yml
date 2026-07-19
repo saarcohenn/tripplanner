@@ -1,11 +1,12 @@
-# Server-side compose file — copy to ~/tripplanner/docker-compose.yml on the homelab
-# box together with a .env file (GOOGLE_MAPS_API_KEY=...). Pull-only: no build context.
+# Server-side compose file — copy to ~/docker/tripplanner/docker-compose.yml on the
+# homelab box together with a .env file (GOOGLE_MAPS_API_KEY=...). Pull-only: no build.
+# Host port 8081 — 8080 is taken by it-tools in the apps-stack.
 services:
   tripplanner:
     image: ghcr.io/saarcohenn/tripplanner:latest
     container_name: tripplanner
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     volumes:
