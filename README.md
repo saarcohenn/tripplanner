@@ -5,61 +5,112 @@ schedule — and, unlike every other travel site, **never suggests new places**.
 tells you what to *drop*, when to *rest*, and when you'll have to *wake up early* to make
 your own plan work.
 
-## Features
+![Daily plan with advisor](docs/screenshots/plan-desktop.png)
 
-- **Multi-city / multi-country trips** — a trip is an ordered list of legs (city + date range).
-  One-way, round-trip and multi-city are all supported.
-- **Interactive map** — with a Google Maps API key: Google map tiles with **English labels**,
-  English place search, and **place photos** (Places API). Without one it falls back to
-  Leaflet + OpenStreetMap with Nominatim search. Either way: click-to-pin, paste a Google Maps
-  link, and an "Open in Google Maps" link on every place.
-- **Multi-stage trips** — stage 1: collect places; stage 2: generate the plan (trip turns
-  **green**); stage 3: adding a place to a planned trip asks for confirmation first, since the
-  plan may change.
-- **Plan generator** — your configured LLM arranges *only the places you added* into a detailed
-  daily travel guide: directions between stops, queue-avoidance tips, meals, transit, rest
-  blocks, and a per-day **alarm suggestion** ("Alarm 06:45 — be at Fushimi Inari by 07:30,
-  before the tour groups").
-- **Expenses** — log spending per city/category, see totals vs. budget with breakdowns;
-  booking costs are included automatically.
-- **Advisor** — reviews the plan and flags overloaded days, drop candidates, needed rest and
-  early wake-ups. It is hard-prompted to never recommend new attractions.
-- **Change listener** — any change to legs/places/bookings marks the plan outdated; with
-  *Auto-replan* enabled the schedule regenerates itself a few seconds later.
-- **Todo lists** with categories and due dates.
-- **Bookings** — record flights/stays/trains, plus one-click Booking.com / Airbnb searches
-  pre-filled with each city and your leg dates.
-- **Conversation import** — paste a planning conversation (Claude / ChatGPT / any language,
-  Hebrew included) and the LLM extracts destinations, dates, places, budget and todos into a
-  new trip. Nothing is invented.
-- **Bring your own LLM** — Anthropic, OpenAI, Google Gemini or OpenRouter. Your API key is
-  stored only in the app's own SQLite database on your server.
-
-## Run with Docker (recommended)
+## TL;DR — run it in 2 minutes
 
 ```bash
-docker compose up -d --build
-# open http://localhost:8080
+mkdir tripplanner && cd tripplanner
+
+# docker-compose.yml
+cat > docker-compose.yml <<'EOF'
+services:
+  tripplanner:
+    image: ghcr.io/saarcohenn/tripplanner:latest
+    container_name: tripplanner
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    volumes:
+      - tripplanner-data:/app/data
+    restart: unless-stopped
+volumes:
+  tripplanner-data:
+EOF
+
+# .env — optional but recommended (Google map tiles, English labels, place photos)
+echo "GOOGLE_MAPS_API_KEY=your-browser-key-here" > .env
+
+docker compose up -d
+# open http://localhost:8080 → Settings → paste your LLM API key
 ```
 
-Data (trips + settings + your API key) lives in the `tripplanner-data` volume.
+That's it. Everything (trips, settings, your API keys) lives in the `tripplanner-data`
+volume; the `.env` file stays on your machine and is never baked into the image.
 
-The Google Maps key can be provided as an environment variable instead of the Settings UI:
-copy `.env.example` to `.env` and set `GOOGLE_MAPS_API_KEY` — docker-compose picks it up
-automatically. A key saved in the Settings UI takes precedence over the env var.
+## What it does
 
-### Homelab deployment via GHCR
+| | |
+|---|---|
+| **Plan, not suggestions** | Your configured LLM arranges *only the places you added* into a detailed daily guide: directions between stops, queue-avoidance tips, meals, transit, rest blocks, and a per-day **alarm suggestion** ("Alarm 06:45 — be at Fushimi Inari by 07:30, before the tour groups"). |
+| **Advisor** | Reviews the plan and flags overloaded days, drop candidates, needed rest and early wake-ups. Hard-prompted to never recommend new attractions. |
+| **Multi-city trips** | A trip is an ordered list of legs (city + date range). One-way, round-trip and multi-city all work. |
+| **Money** | Log expenses in any currency (trip-local currencies suggested first), booking costs included automatically, everything converted to **your home currency** at daily rates and tracked against the trip budget. |
+| **Import** | Paste a planning conversation (Claude / ChatGPT / any language, Hebrew included) and the LLM extracts destinations, dates, places, budget and todos into a new trip. Nothing is invented. |
+| **BYO LLM** | Anthropic, OpenAI, Google Gemini or OpenRouter. Keys are stored only in the app's SQLite DB on your server and used server-side. |
 
-1. Push this repo to GitHub. The included workflow (`.github/workflows/docker.yml`) builds and
-   pushes `ghcr.io/<your-user>/tripplanner:latest` on every push to `main`.
-2. Edit `docker-compose.yml` and replace `YOUR_GITHUB_USERNAME` with your GitHub username.
-3. On the homelab box:
+### Places with photos, map, bookings
+
+Places are collected from an interactive map (Google Maps with English labels + place
+photos when a key is set; Leaflet/OpenStreetMap otherwise). Bookings get one-click
+Booking.com / Airbnb searches pre-filled with each city and your dates.
+
+![Place cards with photos](docs/screenshots/places-desktop.png)
+
+### Expense tracking in your home currency
+
+![Expenses converted to home currency](docs/screenshots/expenses-desktop.png)
+
+### Mobile-first PWA
+
+Installable on iOS/Android (Add to Home Screen). Drawer navigation with a
+`trip › page` breadcrumb top bar.
+
+<img src="docs/screenshots/mobile-overview.png" width="300" alt="Mobile view">
+
+### Plan lifecycle
+
+1. **Collect** — add legs, then places (map pin, search, or import). Trip dot is grey.
+2. **Plan** — one click generates the daily guide + advisor review. Trip dot turns **green**.
+3. **Guard** — adding a place to a planned trip asks for confirmation first; any change
+   marks the plan outdated, and with *Auto-replan* on it regenerates itself seconds later.
+
+## First-time setup
+
+1. Open **Settings** → pick your LLM provider, paste the API key, **Save**, then **Test**.
+   Use **Load model list** to pick a model from the provider's live catalog.
+2. Set your **home currency** (Settings → Money) — all spending is converted to it.
+3. Optionally add a Google Maps key (env var or Settings) for Google tiles + photos.
+4. Create a trip (or **Import** one from a planning conversation), add legs in
+   **Overview**, add places from the **Map**/**Places** tab, then **Plan → Generate**.
+
+## Deployment
+
+### Image
+
+Every push to `main` builds and pushes `ghcr.io/saarcohenn/tripplanner:latest`
+(multi-stage build, Node 24 slim) via [`docker.yml`](.github/workflows/docker.yml).
+Tagged releases (`v*`) get version tags.
+
+### Auto-deploy to a homelab server
+
+GitHub's hosted runners can't reach a LAN server, so deployment uses a
+**self-hosted runner** on the box itself: [`deploy.yml`](.github/workflows/deploy.yml)
+waits for the image build to succeed, then runs `docker compose pull && up -d` in
+`~/tripplanner` on the server.
+
+One-time server setup:
 
 ```bash
-docker compose pull && docker compose up -d
+# on the server
+mkdir -p ~/tripplanner   # put the TL;DR docker-compose.yml + .env here
+# install a runner: GitHub repo → Settings → Actions → Runners → New self-hosted runner
+# (run it as a service: ./svc.sh install && ./svc.sh start)
 ```
 
-(If the package is private, `docker login ghcr.io` with a PAT that has `read:packages` first.)
+If you'd rather not run a runner, `docker compose pull && docker compose up -d` via
+ssh/cron or [Watchtower](https://containrrr.dev/watchtower/) works just as well.
 
 ## Local development
 
@@ -71,22 +122,15 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
-## First-time setup
-
-1. Open **Settings**, pick your provider, paste your API key, **Save**, then **Test connection**.
-2. Optionally enable **Auto-replan**.
-3. Create a trip (or use **Import** to extract one from a planning conversation).
-4. Add legs in **Overview**, add places from the **Map** or **Places** tab.
-5. Open **Plan** → **Generate plan**. The Advisor panel appears next to the schedule.
-
 ## Architecture
 
 ```
-frontend/   React + TypeScript + Vite + Leaflet (react-leaflet)
-backend/    Node 20+ + Express + better-sqlite3 (single-file DB in ./data or $DATA_DIR)
+frontend/   React + TypeScript + Vite + Leaflet (react-leaflet) + @vis.gl/react-google-maps
+backend/    Node 24 + Express + better-sqlite3 (single-file DB in ./data or $DATA_DIR)
 Dockerfile  multi-stage: builds frontend, compiles backend, single runtime image on :8080
 ```
 
-The backend proxies all LLM calls server-side (`/api/settings`, `/api/trips/:id/generate-plan`,
-`/api/trips/:id/advise`, `/api/import/conversation`), so the API key never reaches the browser —
-`GET /api/settings` returns only a masked fingerprint of it.
+The backend proxies all LLM calls server-side (`/api/trips/:id/generate-plan`,
+`/api/trips/:id/advise`, `/api/import/conversation`), so API keys never reach the
+browser — `GET /api/settings` returns only a masked fingerprint. FX rates come from a
+free daily-rates API, cached server-side for 12 h.

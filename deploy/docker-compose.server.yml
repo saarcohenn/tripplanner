@@ -1,0 +1,16 @@
+# Server-side compose file — copy to ~/tripplanner/docker-compose.yml on the homelab
+# box together with a .env file (GOOGLE_MAPS_API_KEY=...). Pull-only: no build context.
+services:
+  tripplanner:
+    image: ghcr.io/saarcohenn/tripplanner:latest
+    container_name: tripplanner
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    volumes:
+      - tripplanner-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tripplanner-data:

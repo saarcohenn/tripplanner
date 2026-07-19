@@ -1,0 +1,24 @@
+# Deploys to the homelab server ("apps") via a SELF-HOSTED runner installed on it —
+# GitHub's hosted runners can't reach a LAN address, so the runner brings the job
+# to the server instead. Setup: repo → Settings → Actions → Runners → New self-hosted runner.
+name: Deploy to homelab
+
+on:
+  workflow_run:
+    workflows: ["Build and push image to GHCR"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    # Only deploy when the image build succeeded (or on a manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Pull latest image and restart
+        working-directory: /home/saar/tripplanner
+        run: |
+          docker compose pull
+          docker compose up -d
+          docker image prune -f

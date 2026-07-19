@@ -21,7 +21,12 @@ export default function App() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<TripDetail | null>(null);
-  const [tab, setTab] = useState<Tab>("Overview");
+  // Tab is deep-linkable via the URL hash (e.g. /#Plan) and kept in sync for reload/PWA re-entry
+  const [tab, setTab] = useState<Tab>(() => {
+    const h = decodeURIComponent(window.location.hash.slice(1));
+    return (TABS as readonly string[]).includes(h) ? (h as Tab) : "Overview";
+  });
+  useEffect(() => { window.history.replaceState(null, "", `#${tab}`); }, [tab]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
