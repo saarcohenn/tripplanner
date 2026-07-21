@@ -133,6 +133,13 @@ a { color: var(--accent-dark); }
 .row.spread { justify-content: space-between; }
 .row.wrap { flex-wrap: wrap; align-items: flex-end; }
 .row.wrap label.block { flex: 1; min-width: 140px; }
+/* Always exactly 2 even columns — unlike flex+min-width+wrap, a grid never collapses to
+   a single column at narrow widths, so City/Country stay side by side everywhere. */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* Grid items default to min-width:auto (their content's intrinsic size), so without this
+   the label+input would refuse to shrink below the input's natural width and overflow
+   the column instead of respecting 1fr. */
+.two-col > * { min-width: 0; }
 
 /* ---------- cards ---------- */
 .table {
@@ -153,6 +160,11 @@ a { color: var(--accent-dark); }
   box-shadow: var(--shadow); padding: 12px;
 }
 .add-row input:first-child { flex: 1; min-width: 180px; }
+/* .add-row input:first-child (above) is a descendant selector meant for flat add-rows
+   (bare inputs as direct children) — inside .leg-add-row's nested label/grid structure,
+   each of City and Country is *also* the first child of its own <label>, so both match
+   and get forced to 180px wide regardless of the grid column's real width. Override it. */
+.leg-add-row .two-col input:first-child { min-width: 0; }
 
 .alert {
   background: var(--card); border: 1px solid var(--border);
@@ -273,6 +285,40 @@ input.subtle:hover, input.subtle:focus { border-color: var(--border-strong); bac
 .bcard-title { font-weight: 600; }
 .bcard-cost { font-weight: 600; font-variant-numeric: tabular-nums; }
 .bcard-body { padding: 2px 16px 14px; border-top: 1px dashed var(--border); }
+
+/* ---------- foldable draggable leg cards ---------- */
+.leg-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 20px; }
+.leg-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); overflow: hidden; transition: opacity 0.15s, box-shadow 0.15s;
+}
+.leg-card.dragging { opacity: 0.5; }
+.leg-card.drag-over { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+.leg-head { display: flex; align-items: stretch; }
+.leg-drag-handle {
+  flex: 0 0 auto; background: none; border: none; box-shadow: none; cursor: grab;
+  color: var(--muted); font-size: 16px; padding: 0 4px 0 12px; touch-action: none;
+  display: flex; align-items: center; border-radius: 0;
+}
+.leg-drag-handle:hover:not(:disabled) { background: none; border: none; box-shadow: none; color: var(--text); }
+.leg-drag-handle:active { cursor: grabbing; }
+.leg-summary {
+  flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: none; box-shadow: none; border-radius: 0;
+  padding: 12px 14px 12px 6px; cursor: pointer; text-align: left; font-size: 13px; color: var(--text);
+}
+.leg-summary:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; }
+.leg-chev { color: var(--muted); font-size: 11px; width: 12px; flex: 0 0 auto; }
+.leg-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leg-body { padding: 2px 16px 14px; border-top: 1px dashed var(--border); }
+
+/* The add-leg form reuses .add-row's card chrome but lays out like .leg-body (labeled
+   fields stacked, not a bare flex-wrap row) so it matches the edit view it's paired with. */
+.leg-add-row { display: block; }
+
+.date-range { align-items: center; }
+.date-range input[type="date"] { flex: 1; min-width: 0; }
+.date-range-arrow { flex: 0 0 auto; }
 
 /* ---------- expenses ---------- */
 .exp-summary {
@@ -425,6 +471,15 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   /* Place cards: full-width with an even bigger photo on phones */
   .place-grid { grid-template-columns: 1fr; }
   .pcard-img { height: 190px; }
+
+  /* Two native date inputs side by side don't have room to shrink at phone widths —
+     stack them so neither one clips. */
+  .date-range { flex-direction: column; align-items: stretch; gap: 4px; }
+  .date-range input[type="date"] { width: 100%; }
+  .date-range-arrow { display: none; }
+
+  /* City/Country stay side by side on phones instead of stretching full-width */
+  .leg-add-row .row.wrap label.block, .leg-body .row.wrap label.block { flex: 0 0 155px; min-width: 0; }
 
   /* 16px inputs stop iOS Safari from auto-zooming on focus */
   input, select, textarea { font-size: 16px; }

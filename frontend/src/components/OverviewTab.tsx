@@ -3,10 +3,25 @@ import { api } from "../api";
 import type { Leg, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
 
+function fmtDate(d: string | null): string {
+  if (!d) return "?";
+  const dt = new Date(`${d}T00:00:00`);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function fmtRange(a: string | null, b: string | null): string {
+  if (!a && !b) return "";
+  return `${fmtDate(a)} → ${fmtDate(b)}`;
+}
+
 export default function OverviewTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
   const { trip, legs } = detail;
   const [form, setForm] = useState({ ...trip });
   const [newLeg, setNewLeg] = useState({ city: "", country: "", arrive_date: "", depart_date: "" });
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
 
   async function saveTrip() {
     await api.put(`/trips/${trip.id}`, {
@@ -35,18 +50,52 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
     await refresh();
   }
 
-  async function moveLeg(idx: number, dir: -1 | 1) {
-    const other = legs[idx + dir];
-    if (!other) return;
-    await api.put(`/legs/${legs[idx].id}`, { seq: other.seq });
-    await api.put(`/legs/${other.id}`, { seq: legs[idx].seq });
-    await refresh();
-  }
-
   async function deleteLeg(leg: Leg) {
     if (!window.confirm(`Remove leg ${leg.city}? Places stay but lose their city link.`)) return;
     await api.del(`/legs/${leg.id}`);
     await refresh();
+  }
+
+  // Reorders by renumbering every leg's seq 0..n-1 in the new order — simpler and more robust
+  // than swapping pairs, since a drag can move an item past several others in one gesture.
+  async function reorder(fromId: number, toId: number) {
+    if (fromId === toId) return;
+    const ids = legs.map((l) => l.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(toId);
+    if (from === -1 || to === -1) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    await Promise.all(
+      ids.map((id, i) => {
+        const leg = legs.find((l) => l.id === id)!;
+        return leg.seq !== i ? api.put(`/legs/${id}`, { seq: i }) : Promise.resolve();
+      })
+    );
+    await refresh();
+  }
+
+  // Pointer Events cover mouse + touch + pen in one code path — no native HTML5 drag-and-drop,
+  // whose touch support is inconsistent across mobile browsers.
+  function startDrag(legId: number) {
+    setDragId(legId);
+    let currentOverId: number | null = null;
+
+    function onMove(e: PointerEvent) {
+      const cardEl = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>(
+        "[data-leg-id]"
+      );
+      currentOverId = cardEl ? Number(cardEl.dataset.legId) : null;
+      setOverId(currentOverId);
+    }
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setDragId(null);
+      setOverId(null);
+      if (currentOverId != null && currentOverId !== legId) void reorder(legId, currentOverId);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   return (
@@ -73,33 +122,82 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
       <button className="primary" onClick={saveTrip}>Save trip</button>
 
       <h2>Legs (cities, in order)</h2>
-      <table className="table">
-        <thead><tr><th></th><th>City</th><th>Country</th><th>Arrive</th><th>Depart</th><th></th></tr></thead>
-        <tbody>
-          {legs.map((l, i) => (
-            <tr key={l.id}>
-              <td className="nowrap">
-                <button className="small" disabled={i === 0} onClick={() => moveLeg(i, -1)}>↑</button>
-                <button className="small" disabled={i === legs.length - 1} onClick={() => moveLeg(i, 1)}>↓</button>
-              </td>
-              <td><input dir="auto" defaultValue={l.city} onBlur={(e) => e.target.value !== l.city && updateLeg(l, { city: e.target.value })} /></td>
-              <td><input dir="auto" defaultValue={l.country} onBlur={(e) => e.target.value !== l.country && updateLeg(l, { country: e.target.value })} /></td>
-              <td><input type="date" defaultValue={l.arrive_date ?? ""} onBlur={(e) => e.target.value !== (l.arrive_date ?? "") && updateLeg(l, { arrive_date: e.target.value || null })} /></td>
-              <td><input type="date" defaultValue={l.depart_date ?? ""} onBlur={(e) => e.target.value !== (l.depart_date ?? "") && updateLeg(l, { depart_date: e.target.value || null })} /></td>
-              <td><button className="danger small" onClick={() => deleteLeg(l)}>✕</button></td>
-            </tr>
-          ))}
-          <tr>
-            <td>＋</td>
-            <td><input dir="auto" placeholder="City" value={newLeg.city} onChange={(e) => setNewLeg({ ...newLeg, city: e.target.value })} /></td>
-            <td><input dir="auto" placeholder="Country" value={newLeg.country} onChange={(e) => setNewLeg({ ...newLeg, country: e.target.value })} /></td>
-            <td><input type="date" value={newLeg.arrive_date} onChange={(e) => setNewLeg({ ...newLeg, arrive_date: e.target.value })} /></td>
-            <td><input type="date" value={newLeg.depart_date} onChange={(e) => setNewLeg({ ...newLeg, depart_date: e.target.value })} /></td>
-            <td><button className="primary small" onClick={addLeg}>Add</button></td>
-          </tr>
-        </tbody>
-      </table>
-      <p className="hint">Tip: the leg a place belongs to decides which day-range it can be scheduled in. A one-way or multi-city trip is just legs without a return — set the trip type above accordingly.</p>
+      <div className="add-row leg-add-row">
+        <div className="two-col">
+          <label className="block">City
+            <input dir="auto" placeholder="e.g. Seoul" value={newLeg.city} onChange={(e) => setNewLeg({ ...newLeg, city: e.target.value })} />
+          </label>
+          <label className="block">Country
+            <input dir="auto" placeholder="e.g. South Korea" value={newLeg.country} onChange={(e) => setNewLeg({ ...newLeg, country: e.target.value })} />
+          </label>
+        </div>
+        <label className="block">Dates
+          <div className="row date-range">
+            <input type="date" title="Arrival date" value={newLeg.arrive_date} onChange={(e) => setNewLeg({ ...newLeg, arrive_date: e.target.value })} />
+            <span className="hint date-range-arrow">→</span>
+            <input type="date" title="Departure date" value={newLeg.depart_date} onChange={(e) => setNewLeg({ ...newLeg, depart_date: e.target.value })} />
+          </div>
+        </label>
+        <button className="primary" onClick={addLeg}>+ Add leg</button>
+      </div>
+
+      <div className="leg-list">
+        {legs.map((l) => {
+          const open = expanded === l.id;
+          const isDragging = dragId === l.id;
+          const isOver = overId === l.id && dragId !== l.id;
+          return (
+            <div
+              key={l.id}
+              data-leg-id={l.id}
+              className={`leg-card${isDragging ? " dragging" : ""}${isOver ? " drag-over" : ""}`}
+            >
+              <div className="leg-head">
+                <button
+                  type="button" className="leg-drag-handle" aria-label="Drag to reorder"
+                  onPointerDown={(e) => { e.preventDefault(); startDrag(l.id); }}
+                >⠿</button>
+                <button className="leg-summary" onClick={() => setExpanded(open ? null : l.id)}>
+                  <span className="leg-chev">{open ? "▾" : "▸"}</span>
+                  <span className="grow leg-summary-text" dir="auto">
+                    <strong>{l.city || "New leg"}</strong>
+                    {l.country && <span className="hint"> · {l.country}</span>}
+                  </span>
+                  <span className="hint nowrap">{fmtRange(l.arrive_date, l.depart_date)}</span>
+                </button>
+              </div>
+              {open && (
+                <div className="leg-body">
+                  <div className="two-col">
+                    <label className="block">City
+                      <input dir="auto" defaultValue={l.city} onBlur={(e) => e.target.value !== l.city && updateLeg(l, { city: e.target.value })} />
+                    </label>
+                    <label className="block">Country
+                      <input dir="auto" defaultValue={l.country} onBlur={(e) => e.target.value !== l.country && updateLeg(l, { country: e.target.value })} />
+                    </label>
+                  </div>
+                  <label className="block">Dates
+                    <div className="row date-range">
+                      <input type="date" defaultValue={l.arrive_date ?? ""} onBlur={(e) => e.target.value !== (l.arrive_date ?? "") && updateLeg(l, { arrive_date: e.target.value || null })} />
+                      <span className="hint date-range-arrow">→</span>
+                      <input type="date" defaultValue={l.depart_date ?? ""} onBlur={(e) => e.target.value !== (l.depart_date ?? "") && updateLeg(l, { depart_date: e.target.value || null })} />
+                    </div>
+                  </label>
+                  <div className="row spread">
+                    <span />
+                    <button className="danger small" onClick={() => deleteLeg(l)}>Delete leg</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {legs.length === 0 && <p className="hint">No legs yet — add your first city above.</p>}
+      </div>
+      <p className="hint">
+        Tip: the leg a place belongs to decides which day-range it can be scheduled in. Drag the ⠿ handle to
+        reorder. A one-way or multi-city trip is just legs without a return — set the trip type above accordingly.
+      </p>
     </div>
   );
 }
