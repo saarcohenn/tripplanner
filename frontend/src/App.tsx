@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { Settings, Trip, TripDetail } from "./types";
+import type { PlanJob, Settings, Trip, TripDetail } from "./types";
 import OverviewTab from "./components/OverviewTab";
 import MapTab from "./components/MapTab";
 import PlacesTab from "./components/PlacesTab";
@@ -28,10 +28,13 @@ export default function App() {
   });
   useEffect(() => { window.history.replaceState(null, "", `#${tab}`); }, [tab]);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [planJob, setPlanJob] = useState<PlanJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const replanTimer = useRef<number | null>(null);
+  // Dedupes SSE deliveries (initial-state-on-connect + reconnects) so a dismissed error/refresh
+  // doesn't fire again for the same job.
+  const handledJobRef = useRef<string | null>(null);
 
   const loadTrips = useCallback(async () => {
     const t = await api.get<Trip[]>("/trips");
@@ -64,19 +67,51 @@ export default function App() {
   const llmReady = !!settings?.llm_api_key;
   const autoReplan = settings?.auto_replan === "1";
 
+  // Plan/advisor generation runs as a background job on the server (LLM calls can take minutes on
+  // slow/high-end models) — this just kicks it off; the SSE subscription below reports back.
   const generatePlan = useCallback(async () => {
     if (!detail) return;
-    setBusy("Generating plan + advisor review…");
     setError(null);
     try {
-      await api.post(`/trips/${detail.trip.id}/generate-plan`);
-      await loadDetail();
+      setPlanJob(await api.post<PlanJob>(`/trips/${detail.trip.id}/generate-plan`));
     } catch (e: any) {
       setError(e.message);
-    } finally {
-      setBusy(null);
     }
-  }, [detail, loadDetail]);
+  }, [detail]);
+
+  const reAdvise = useCallback(async () => {
+    if (!detail) return;
+    setError(null);
+    try {
+      setPlanJob(await api.post<PlanJob>(`/trips/${detail.trip.id}/advise`));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }, [detail]);
+
+  // Live job updates over Server-Sent Events: the initial event on connect recovers in-progress
+  // state after a reload, and later events land the moment the LLM actually replies.
+  useEffect(() => {
+    setPlanJob(null);
+    handledJobRef.current = null;
+    if (selectedId == null) return;
+    const es = new EventSource(`/api/trips/${selectedId}/events`);
+    es.addEventListener("job", (ev: MessageEvent) => {
+      const job: PlanJob | null = ev.data ? JSON.parse(ev.data) : null;
+      setPlanJob(job);
+      if (!job) return;
+      const key = `${job.id}:${job.status}`;
+      if (handledJobRef.current === key) return;
+      handledJobRef.current = key;
+      if (job.status === "done") void loadDetail();
+      else if (job.status === "error") setError(job.error || "Generation failed.");
+    });
+    return () => es.close();
+  }, [selectedId, loadDetail]);
+
+  const busy = planJob?.status === "running"
+    ? (planJob.kind === "advisor" ? "Re-analyzing plan…" : "Generating plan + advisor review…")
+    : null;
 
   // Plan watcher: when the trip data changes (places added on the map, legs edited, …)
   // and auto-replan is on, regenerate the daily schedule after a short quiet period.
@@ -208,7 +243,8 @@ export default function App() {
           <PlacesTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null}
             llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Plan" ? (
-          <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan} busy={!!busy} />
+          <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan}
+            reAdvise={reAdvise} planJob={planJob} busy={!!busy} />
         ) : tab === "Todos" ? (
           <TodosTab detail={detail} refresh={refresh} />
         ) : tab === "Expenses" ? (

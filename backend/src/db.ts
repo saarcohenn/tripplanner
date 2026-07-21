@@ -113,7 +113,27 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0
 );
+
+-- Plan/advisor generation runs in the background (LLM calls can take minutes); this row is how the
+-- HTTP layer reports progress back to clients without blocking the request that kicked it off.
+CREATE TABLE IF NOT EXISTS plan_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'plan',              -- plan | advisor
+  status TEXT NOT NULL DEFAULT 'running',         -- running | done | error
+  error TEXT,
+  plan_id INTEGER,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
 `);
+
+// A job still marked "running" from before this process started can never finish — its in-memory
+// promise is gone with the old process. Surface that instead of leaving clients waiting forever.
+db.prepare(
+  `UPDATE plan_jobs SET status = 'error', error = 'Server restarted during generation', finished_at = datetime('now')
+   WHERE status = 'running'`
+).run();
 
 // Additive migrations for databases created by older versions.
 function addColumn(table: string, ddl: string) {

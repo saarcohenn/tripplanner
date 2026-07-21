@@ -1,35 +1,26 @@
-import { useState } from "react";
 import { api } from "../api";
-import type { AdvisorDoc, PlanDoc, TripDetail } from "../types";
+import type { AdvisorDoc, PlanDoc, PlanJob, TripDetail } from "../types";
 
 const KIND_ICON: Record<string, string> = {
   visit: "📍", meal: "🍽️", transit: "🚆", rest: "😴", checkin: "🏨",
   checkout: "🧳", flight: "✈️", other: "•",
 };
 
-export default function PlanTab({ detail, refresh, llmReady, generatePlan, busy }: {
+export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdvise, planJob, busy }: {
   detail: TripDetail;
   refresh: () => Promise<void>;
   llmReady: boolean;
   generatePlan: () => Promise<void>;
+  reAdvise: () => Promise<void>;
+  planJob: PlanJob | null;
   busy: boolean;
 }) {
   const { plan, places } = detail;
-  const [advising, setAdvising] = useState(false);
+  const advising = busy && planJob?.kind === "advisor";
   const placeById = new Map(places.map((p) => [p.id, p]));
 
   const planDoc: PlanDoc | null = plan ? safeParse(plan.plan_json) : null;
   const advisor: AdvisorDoc | null = plan?.advisor_json ? safeParse(plan.advisor_json) : null;
-
-  async function reAdvise() {
-    setAdvising(true);
-    try {
-      await api.post(`/trips/${detail.trip.id}/advise`);
-      await refresh();
-    } finally {
-      setAdvising(false);
-    }
-  }
 
   async function dropPlace(placeId: number | null) {
     if (placeId == null) return;

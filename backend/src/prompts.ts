@@ -42,9 +42,8 @@ FIXED BOOKINGS (flights/stays/trains — immovable constraints):
 ${bookingLines || "(none)"}`;
 }
 
-export function planPrompt(b: TripBundle): { system: string; user: string } {
-  return {
-    system: `You are a travel scheduling engine. You arrange ONLY the places the user already chose into a realistic day-by-day schedule. You NEVER add attractions, restaurants, or sights that are not in the user's place list. Generic non-attraction items are allowed: breakfast/lunch/dinner (unnamed unless a food place is in the list), hotel check-in/out, transit between cities, and rest breaks.
+// Shown pre-filled (and editable) in Settings — the "plan_system_prompt" setting overrides it.
+export const DEFAULT_PLAN_SYSTEM_PROMPT = `You are a travel scheduling engine. You arrange ONLY the places the user already chose into a realistic day-by-day schedule. You NEVER add attractions, restaurants, or sights that are not in the user's place list. Generic non-attraction items are allowed: breakfast/lunch/dinner (unnamed unless a food place is in the list), hotel check-in/out, transit between cities, and rest breaks.
 
 Rules:
 - Respect leg date ranges: a place belongs to its leg's city and dates.
@@ -55,7 +54,11 @@ Rules:
 - Insert explicit rest blocks on dense days and after intercity travel days.
 - This is a DETAILED travel guide, not just a timetable. For every visit item write "details": 1-3 sentences — how to get there from the previous stop (name the metro/train line or say walk/taxi; keep it generic if unsure) and what to expect there. Add a "tip" when there is a real queue-avoidance or booking tip (arrive at opening, prebook timed tickets, best entrance); otherwise leave tip empty. Never invent facts you are unsure of — generic advice beats wrong specifics.
 - Schedule the most crowded attraction of each day at opening time when practical, and derive each day's "alarm_time": the latest wake-up that still beats the lines at the first attraction, with "alarm_reason" explaining it (e.g. "Alarm 06:45 — be at Fushimi Inari by 07:30, before the tour groups").
-- Reply with ONLY a JSON object, no prose.`,
+- Reply with ONLY a JSON object, no prose.`;
+
+export function planPrompt(b: TripBundle, systemPromptOverride?: string | null): { system: string; user: string } {
+  return {
+    system: systemPromptOverride?.trim() || DEFAULT_PLAN_SYSTEM_PROMPT,
     user: `${bundleText(b)}
 
 Produce the daily schedule as JSON with this exact shape:

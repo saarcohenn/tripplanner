@@ -148,7 +148,20 @@ export type Settings = {
   llm_price_out: string | null;
   llm_monthly_budget: string | null;
   home_currency: string | null;
+  plan_system_prompt: string | null;
+  default_plan_system_prompt: string;
   default_models: Record<string, string>;
+};
+
+export type PlanJob = {
+  id: number;
+  trip_id: number;
+  kind: "plan" | "advisor";
+  status: "running" | "done" | "error";
+  error: string | null;
+  plan_id: number | null;
+  started_at: string;
+  finished_at: string | null;
 };
 
 export type LlmUsageDay = { day: string; input_tokens: number; output_tokens: number; calls: number };

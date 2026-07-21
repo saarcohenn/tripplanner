@@ -47,7 +47,30 @@ export async function complete(
 
 type RawResult = { text: string; input: number; output: number };
 
+// Detailed multi-week itineraries on slow/high-end models can take several minutes — well beyond
+// the ~5min default timeout fetch/undici would otherwise apply. Give every LLM call real headroom
+// rather than let it die silently mid-generation.
+const LLM_TIMEOUT_MS = 9 * 60_000;
+
 async function completeRaw(c: LlmConfig, system: string, user: string): Promise<RawResult> {
+  try {
+    return await completeRawInner(c, system, user);
+  } catch (e: any) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") {
+      throw Object.assign(
+        new Error(
+          `${c.provider} (${c.model}) did not reply within ${LLM_TIMEOUT_MS / 60_000} minutes. This can happen with ` +
+          `very detailed, long/multi-city trips on slower models — try again, pick a faster model, or regenerate ` +
+          `after trimming the trip's date range or place list.`
+        ),
+        { status: 504 }
+      );
+    }
+    throw e;
+  }
+}
+
+async function completeRawInner(c: LlmConfig, system: string, user: string): Promise<RawResult> {
   switch (c.provider) {
     case "anthropic": {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -63,6 +86,7 @@ async function completeRaw(c: LlmConfig, system: string, user: string): Promise<
           system,
           messages: [{ role: "user", content: user }],
         }),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
       });
       const data: any = await parseOrThrow(res, "Anthropic");
       return {
@@ -93,6 +117,7 @@ async function completeRaw(c: LlmConfig, system: string, user: string): Promise<
             { role: "user", content: user },
           ],
         }),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
       });
       const data: any = await parseOrThrow(res, c.provider === "openai" ? "OpenAI" : "OpenRouter");
       return {
@@ -116,6 +141,7 @@ async function completeRaw(c: LlmConfig, system: string, user: string): Promise<
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: "user", parts: [{ text: user }] }],
           }),
+          signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
         }
       );
       const data: any = await parseOrThrow(res, "Gemini");

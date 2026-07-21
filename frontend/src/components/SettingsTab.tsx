@@ -175,6 +175,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
   const [priceIn, setPriceIn] = useState("");
   const [priceOut, setPriceOut] = useState("");
   const [monthlyBudget, setMonthlyBudget] = useState("");
+  const [planSystemPrompt, setPlanSystemPrompt] = useState("");
 
   useEffect(() => {
     api.get<LlmUsage>("/llm/usage").then(setUsage).catch(() => {});
@@ -192,6 +193,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
     setPriceOut(settings.llm_price_out || "");
     setMonthlyBudget(settings.llm_monthly_budget || "");
     setHomeCurrency(settings.home_currency || "USD");
+    setPlanSystemPrompt(settings.plan_system_prompt || settings.default_plan_system_prompt || "");
   }, [settings]);
 
   async function loadModels() {
@@ -226,6 +228,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
       llm_price_out: priceOut,
       llm_monthly_budget: monthlyBudget,
       home_currency: homeCurrency,
+      plan_system_prompt: planSystemPrompt,
     });
     await reload();
     setStatus("Saved.");
@@ -290,6 +293,22 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
         <input type="checkbox" checked={autoReplan} onChange={(e) => setAutoReplan(e.target.checked)} />
         Auto-replan: regenerate the daily plan automatically a few seconds after the trip changes
       </label>
+
+      <div className="row spread">
+        <h2>Plan generation prompt</h2>
+        {settings?.default_plan_system_prompt && planSystemPrompt !== settings.default_plan_system_prompt && (
+          <button className="small" onClick={() => setPlanSystemPrompt(settings.default_plan_system_prompt)}>
+            Reset to default
+          </button>
+        )}
+      </div>
+      <p className="hint">
+        The system prompt sent to your LLM every time a plan is generated. Edit it to change tone, add
+        constraints (dietary needs, mobility, pacing preference), or adjust the level of detail — it still
+        gets your trip's legs, places and bookings as the actual content to schedule.
+      </p>
+      <textarea rows={10} value={planSystemPrompt} onChange={(e) => setPlanSystemPrompt(e.target.value)} />
+
       <h2>Money</h2>
       <label className="block">Home currency
         <CurrencySelect value={homeCurrency} onChange={setHomeCurrency} />

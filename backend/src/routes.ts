@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
-import { planPrompt, advisorPrompt, importPrompt, TripBundle } from "./prompts.js";
+import { planPrompt, advisorPrompt, importPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 
 export const api = Router();
 
@@ -111,25 +111,71 @@ for (const [name, spec] of Object.entries(children)) {
   }));
 }
 
-// ---------- plan generation + advisor ----------
+// ---------- plan generation + advisor (background jobs, pushed to clients over SSE) ----------
+// LLM calls can take minutes on slow/high-end models — the route returns as soon as the job is
+// queued, the work runs detached, and /trips/:id/events streams the result when it lands. This is
+// what actually fixes the "Generate Plan" request dying mid-flight on slow models: the browser's
+// HTTP request to us completes in milliseconds, so it has nothing left to time out on.
+const jobListeners = new Map<number, Set<(job: any) => void>>();
+
+function notifyJob(tripId: number, job: any) {
+  for (const fn of jobListeners.get(tripId) || []) fn(job);
+}
+
+function latestJob(tripId: number) {
+  return db.prepare("SELECT * FROM plan_jobs WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId) ?? null;
+}
+
+// Only one plan/advisor job may run per trip at a time — starts a plan_jobs row, runs `work` in the
+// background, and records done/error on completion. Returns the freshly-inserted row immediately.
+function startJob(tripId: number, kind: "plan" | "advisor", work: () => Promise<{ planId: number }>) {
+  const r = db.prepare(`INSERT INTO plan_jobs (trip_id, kind, status) VALUES (?, ?, 'running')`).run(tripId, kind);
+  const job = latestJob(tripId);
+  void (async () => {
+    try {
+      const { planId } = await work();
+      db.prepare("UPDATE plan_jobs SET status = 'done', plan_id = ?, finished_at = datetime('now') WHERE id = ?")
+        .run(planId, r.lastInsertRowid);
+    } catch (e: any) {
+      db.prepare("UPDATE plan_jobs SET status = 'error', error = ?, finished_at = datetime('now') WHERE id = ?")
+        .run(String(e.message || e).slice(0, 2000), r.lastInsertRowid);
+    }
+    notifyJob(tripId, latestJob(tripId));
+  })();
+  return job;
+}
+
 api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
   const tripId = Number(req.params.id);
   const b = getBundle(tripId);
+  const existing: any = latestJob(tripId);
+  if (existing?.status === "running") return void res.status(202).json(existing);
+
   const version = (b.trip as any).plan_version;
-  const p = planPrompt(b);
-  const raw = await complete(p.system, p.user, undefined, "plan");
-  const plan = extractJson(raw);
+  const job = startJob(tripId, "plan", async () => {
+    const p = planPrompt(b, getSetting("plan_system_prompt"));
+    const raw = await complete(p.system, p.user, undefined, "plan");
+    const plan = extractJson(raw);
 
-  const a = advisorPrompt(b, JSON.stringify(plan));
-  const advRaw = await complete(a.system, a.user, undefined, "advisor");
-  const advisor = extractJson(advRaw);
+    // The advisor review is a separate, best-effort LLM call. A slow or failing advisor must never
+    // throw away a plan that already took real time/money to generate — it's re-triggerable via /advise.
+    let advisorJson: string | null = null;
+    try {
+      const a = advisorPrompt(b, JSON.stringify(plan));
+      const advRaw = await complete(a.system, a.user, undefined, "advisor");
+      advisorJson = JSON.stringify(extractJson(advRaw));
+    } catch (e: any) {
+      console.error(`Advisor review failed for trip ${tripId} (plan was still saved):`, e.message || e);
+    }
 
-  const r = db.prepare(
-    `INSERT INTO plans (trip_id, plan_version, plan_json, advisor_json) VALUES (?,?,?,?)`
-  ).run(tripId, version, JSON.stringify(plan), JSON.stringify(advisor));
-  // A generated plan moves the trip into the "planned" (green) stage.
-  db.prepare("UPDATE trips SET stage = 'planned' WHERE id = ?").run(tripId);
-  res.json(db.prepare("SELECT * FROM plans WHERE id = ?").get(r.lastInsertRowid));
+    const r = db.prepare(
+      `INSERT INTO plans (trip_id, plan_version, plan_json, advisor_json) VALUES (?,?,?,?)`
+    ).run(tripId, version, JSON.stringify(plan), advisorJson);
+    // A generated plan moves the trip into the "planned" (green) stage.
+    db.prepare("UPDATE trips SET stage = 'planned' WHERE id = ?").run(tripId);
+    return { planId: Number(r.lastInsertRowid) };
+  });
+  res.status(202).json(job);
 }));
 
 api.post("/trips/:id/advise", wrap(async (req, res) => {
@@ -137,12 +183,47 @@ api.post("/trips/:id/advise", wrap(async (req, res) => {
   const b = getBundle(tripId);
   const plan: any = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
   if (!plan) throw Object.assign(new Error("Generate a plan first"), { status: 400 });
-  const a = advisorPrompt(b, plan.plan_json);
-  const advRaw = await complete(a.system, a.user, undefined, "advisor");
-  const advisor = extractJson(advRaw);
-  db.prepare("UPDATE plans SET advisor_json = ? WHERE id = ?").run(JSON.stringify(advisor), plan.id);
-  res.json(db.prepare("SELECT * FROM plans WHERE id = ?").get(plan.id));
+  const existing: any = latestJob(tripId);
+  if (existing?.status === "running") return void res.status(202).json(existing);
+
+  const job = startJob(tripId, "advisor", async () => {
+    const a = advisorPrompt(b, plan.plan_json);
+    const advRaw = await complete(a.system, a.user, undefined, "advisor");
+    const advisor = extractJson(advRaw);
+    db.prepare("UPDATE plans SET advisor_json = ? WHERE id = ?").run(JSON.stringify(advisor), plan.id);
+    return { planId: plan.id };
+  });
+  res.status(202).json(job);
 }));
+
+// Current/most recent job for a trip — lets a freshly loaded page recover job state without SSE.
+api.get("/trips/:id/plan-job", wrap((req, res) => {
+  res.json(latestJob(Number(req.params.id)));
+}));
+
+// Server-Sent Events: pushes plan_jobs updates for one trip as they happen. Sends the current job
+// state immediately on connect so a client never has to guess whether it missed something.
+api.get("/trips/:id/events", (req, res) => {
+  const tripId = Number(req.params.id);
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no", // hint reverse proxies (nginx et al.) not to buffer this stream
+  });
+  (res as any).flushHeaders?.();
+
+  const send = (job: any) => res.write(`event: job\ndata: ${JSON.stringify(job)}\n\n`);
+  send(latestJob(tripId));
+
+  if (!jobListeners.has(tripId)) jobListeners.set(tripId, new Set());
+  jobListeners.get(tripId)!.add(send);
+  const heartbeat = setInterval(() => res.write(":ping\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    jobListeners.get(tripId)?.delete(send);
+  });
+});
 
 // ---------- conversation import ----------
 api.post("/import/conversation", wrap(async (req, res) => {
@@ -304,7 +385,7 @@ api.get("/fx/:base", wrap(async (req, res) => {
 // ---------- settings ----------
 const SETTING_KEYS = [
   "llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key",
-  "llm_price_in", "llm_price_out", "llm_monthly_budget", "home_currency",
+  "llm_price_in", "llm_price_out", "llm_monthly_budget", "home_currency", "plan_system_prompt",
 ];
 
 api.get("/settings", wrap((_req, res) => {
@@ -314,7 +395,10 @@ api.get("/settings", wrap((_req, res) => {
   if (out.llm_api_key) out.llm_api_key = `saved:${out.llm_api_key.slice(0, 6)}…${out.llm_api_key.slice(-4)}`;
   const source = out.google_maps_api_key ? "db" : process.env.GOOGLE_MAPS_API_KEY ? "env" : null;
   out.google_maps_api_key = effectiveGmapsKey();
-  res.json({ ...out, google_maps_key_source: source, default_models: DEFAULT_MODELS });
+  res.json({
+    ...out, google_maps_key_source: source, default_models: DEFAULT_MODELS,
+    default_plan_system_prompt: DEFAULT_PLAN_SYSTEM_PROMPT,
+  });
 }));
 
 // List chat models available to the given (or saved) key, for the Settings dropdown.
