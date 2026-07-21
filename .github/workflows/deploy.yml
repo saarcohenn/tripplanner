@@ -17,8 +17,10 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Pull latest image and restart
-        working-directory: /home/saar/docker/tripplanner
+        # tripplanner lives inside the shared apps-stack compose file alongside the other
+        # homelab services (homepage, uptime-kuma, it-tools) — only touch its own service.
+        working-directory: /home/saar/docker/apps-stack
         run: |
-          docker compose pull
-          docker compose up -d
+          docker compose pull tripplanner
+          docker compose up -d tripplanner
           docker image prune -f

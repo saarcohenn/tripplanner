@@ -97,14 +97,17 @@ Tagged releases (`v*`) get version tags.
 
 GitHub's hosted runners can't reach a LAN server, so deployment uses a
 **self-hosted runner** on the box itself: [`deploy.yml`](.github/workflows/deploy.yml)
-waits for the image build to succeed, then runs `docker compose pull && up -d` in
-`~/docker/tripplanner` on the server.
+waits for the image build to succeed, then runs `docker compose pull tripplanner && up -d
+tripplanner` against wherever the `tripplanner` service is defined — on this deployment
+that's a service inside a shared `docker-compose.yml` alongside other homelab containers,
+not its own directory (see [`deploy/docker-compose.server.yml`](deploy/docker-compose.server.yml)
+for the standalone version if you're starting fresh).
 
 One-time server setup:
 
 ```bash
 # on the server
-mkdir -p ~/docker/tripplanner   # put the TL;DR docker-compose.yml + .env here
+mkdir -p ~/docker/tripplanner   # or add the tripplanner service to an existing compose file
 # install a runner: GitHub repo → Settings → Actions → Runners → New self-hosted runner
 # (run it as a service: ./svc.sh install && ./svc.sh start)
 ```
