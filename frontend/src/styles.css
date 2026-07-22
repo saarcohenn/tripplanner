@@ -267,8 +267,8 @@ a { color: var(--accent-dark); }
 .pcard-controls select, .pcard-controls input { font-size: 12px; padding: 5px 7px; }
 .pcard-actions { margin-top: auto; }
 
-input.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
-input.subtle:hover, input.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
+input.subtle, select.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
+input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
 
 /* ---------- foldable booking cards ---------- */
 .bcard {
@@ -319,6 +319,20 @@ input.subtle:hover, input.subtle:focus { border-color: var(--border-strong); bac
 .date-range { align-items: center; }
 .date-range input[type="date"] { flex: 1; min-width: 0; }
 .date-range-arrow { flex: 0 0 auto; }
+
+/* Expenses add-form: same treatment as .leg-add-row — stacked labeled fields instead of
+   a bare flex-wrap row. Expense cards reuse the .bcard shell from Bookings. */
+.exp-add-row { display: block; }
+/* A native <select> sizes itself to its widest OPTION text (e.g. "GBP — British Pound"),
+   not the row — left unconstrained the currency select dwarfs the amount input. Give both
+   an explicit flex weight instead so amount gets ~2/3 of the row and currency ~1/3. */
+.amount-row input[type="number"] { flex: 2; min-width: 0; }
+.amount-row select { flex: 1; min-width: 0; }
+/* Same .add-row input:first-child specificity issue as the legs fix (see .leg-add-row
+   above): the amount input is the first child of its own wrapper, so it also matches
+   that rule and gets forced to 180px min-width. Override for both the add-form and the
+   per-expense edit view. */
+.exp-add-row .amount-row input, .bcard-body .amount-row input { min-width: 0; }
 
 /* ---------- expenses ---------- */
 .exp-summary {

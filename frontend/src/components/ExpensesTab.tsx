@@ -9,6 +9,9 @@ const CAT_COLORS: Record<string, string> = {
   flights: "#e86431", food: "#e8412f", transport: "#e88005", lodging: "#b4652e",
   activities: "#f0a41c", shopping: "#c93b6e", other: "#a5917c",
 };
+const CAT_ICON: Record<string, string> = {
+  flights: "✈️", food: "🍽️", transport: "🚆", lodging: "🏨", activities: "🎟️", shopping: "🛍️", other: "💳",
+};
 
 /** Booked items count toward the same categories as manual expenses. */
 const BOOKING_KIND_CAT: Record<string, string> = {
@@ -26,6 +29,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
     title: "", amount: "", category: "food", leg_id: "" as number | "",
     date: "", notes: "", currency: trip.currency || "USD",
   });
+  const [expanded, setExpanded] = useState<number | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
 
   const home = homeCurrency || trip.currency || "USD";
@@ -152,46 +156,96 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
       </div>
 
       <h2>Expenses</h2>
-      <div className="add-row">
-        <input dir="auto" placeholder="What did you pay for?" value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
-        <input type="number" placeholder="Amount" style={{ width: 100 }} value={form.amount}
-          onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-        <CurrencySelect value={form.currency} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} />
-        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-          {CATS.map((c) => <option key={c}>{c}</option>)}
-        </select>
-        <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
-          <option value="">🌍 Trip-wide (flights, insurance…)</option>
-          {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
-        </select>
-        <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        <button className="primary" onClick={add}>Add</button>
+      <div className="add-row exp-add-row">
+        <label className="block">What did you pay for?
+          <input dir="auto" placeholder="e.g. Dinner in Gion" value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
+        </label>
+        <label className="block">Amount
+          <div className="row amount-row">
+            <input type="number" placeholder="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            <CurrencySelect value={form.currency} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} />
+          </div>
+        </label>
+        <div className="two-col">
+          <label className="block">Category
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              {CATS.map((c) => <option key={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="block">City
+            <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
+              <option value="">🌍 Trip-wide</option>
+              {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="block">Date
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        </label>
+        <button className="primary" onClick={add}>+ Add expense</button>
       </div>
-      <table className="table">
-        <tbody>
-          {expenses.map((e) => {
-            const c = toHome(e.amount, e.currency);
-            return (
-              <tr key={e.id}>
-                <td className="nowrap hint">{e.date || "—"}</td>
-                <td dir="auto" className="grow">{e.title}{e.notes && <div className="hint" dir="auto">{e.notes}</div>}</td>
-                <td><span className="chip" style={{ color: CAT_COLORS[e.category] }}>{e.category}</span></td>
-                <td dir="auto" className="hint">{(e.leg_id != null && legName.get(e.leg_id)) || ""}</td>
-                <td className="nowrap">
-                  <div className="row">
-                    <strong>{e.amount.toFixed(0)}</strong>
-                    <CurrencySelect value={e.currency} legs={legs} onChange={(code) => patch(e, { currency: code })} />
+
+      <div className="leg-list">
+        {expenses.map((e) => {
+          const open = expanded === e.id;
+          const c = toHome(e.amount, e.currency);
+          return (
+            <div className="bcard" key={e.id}>
+              <button className="bcard-head" onClick={() => setExpanded(open ? null : e.id)}>
+                <span className="bcard-chev">{open ? "▾" : "▸"}</span>
+                <span title={e.category}>{CAT_ICON[e.category] || "💳"}</span>
+                <span className="grow bcard-title" dir="auto">{e.title}</span>
+                <span className="hint" dir="auto">{(e.leg_id != null && legName.get(e.leg_id)) || "🌍"}</span>
+                <span className="bcard-cost nowrap">{fmtMoney(e.amount, e.currency)}</span>
+              </button>
+              {open && (
+                <div className="bcard-body">
+                  <label className="block">What did you pay for?
+                    <input dir="auto" defaultValue={e.title} onBlur={(ev) => ev.target.value !== e.title && patch(e, { title: ev.target.value })} />
+                  </label>
+                  <label className="block">Amount
+                    <div className="row amount-row">
+                      <input type="number" defaultValue={e.amount}
+                        onBlur={(ev) => ev.target.value !== "" && Number(ev.target.value) !== e.amount && patch(e, { amount: Number(ev.target.value) })} />
+                      <CurrencySelect value={e.currency} legs={legs} onChange={(code) => patch(e, { currency: code })} />
+                    </div>
+                  </label>
+                  {e.currency !== home && (
+                    <p className="hint">≈ {c.exact ? fmtMoney(c.value, home) : "rate unavailable"} in {home} at today's rate</p>
+                  )}
+                  <div className="two-col">
+                    <label className="block">Category
+                      <select value={e.category} onChange={(ev) => patch(e, { category: ev.target.value })}>
+                        {CATS.map((cat) => <option key={cat}>{cat}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">City
+                      <select value={e.leg_id ?? ""} onChange={(ev) => patch(e, { leg_id: ev.target.value === "" ? null : Number(ev.target.value) })}>
+                        <option value="">🌍 Trip-wide</option>
+                        {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
+                      </select>
+                    </label>
                   </div>
-                  {e.currency !== home && <div className="hint">≈ {c.exact ? fmtMoney(c.value, home) : "rate unavailable"}</div>}
-                </td>
-                <td><button className="danger small" onClick={() => remove(e)}>✕</button></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <label className="block">Date
+                    <input type="date" defaultValue={e.date ?? ""} onBlur={(ev) => ev.target.value !== (e.date ?? "") && patch(e, { date: ev.target.value || null })} />
+                  </label>
+                  <label className="block">Notes
+                    <input dir="auto" placeholder="Optional notes…" defaultValue={e.notes}
+                      onBlur={(ev) => ev.target.value !== e.notes && patch(e, { notes: ev.target.value })} />
+                  </label>
+                  <div className="row spread">
+                    <span />
+                    <button className="danger small" onClick={() => remove(e)}>Delete expense</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
       {expenses.length === 0 && <p className="hint">No expenses recorded yet. Booking costs from the Bookings tab are included in the summary automatically.</p>}
+      {expenses.length > 0 && <p className="hint">Click a row to expand and edit — fix the amount or currency to match what your card was actually charged.</p>}
       <p className="hint">
         Pay in any currency — pick it next to the amount (local currencies for this trip's countries are suggested first).
         The summary converts everything to your home currency ({home}), set in Settings → Money.

@@ -18,8 +18,8 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
     await refresh();
   }
 
-  async function toggle(t: Todo) {
-    await api.put(`/todos/${t.id}`, { done: t.done ? 0 : 1 });
+  async function patch(t: Todo, patchObj: Partial<Todo>) {
+    await api.put(`/todos/${t.id}`, patchObj);
     await refresh();
   }
 
@@ -30,6 +30,28 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
 
   const open = todos.filter((t) => !t.done);
   const done = todos.filter((t) => t.done);
+
+  function renderTodo(t: Todo) {
+    return (
+      <div className={`todo${t.done ? " done" : ""}`} key={t.id}>
+        <input type="checkbox" checked={!!t.done} onChange={() => patch(t, { done: t.done ? 0 : 1 })} />
+        {t.source === "ai" && <span title="Extracted by AI from your conversation">✨</span>}
+        <input
+          dir="auto" className="subtle grow" defaultValue={t.text}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          onBlur={(e) => e.target.value.trim() && e.target.value !== t.text && patch(t, { text: e.target.value })}
+        />
+        <select className="subtle" value={t.category} onChange={(e) => patch(t, { category: e.target.value })}>
+          {CATS.map((c) => <option key={c}>{c}</option>)}
+        </select>
+        <input
+          type="date" className="subtle nowrap" defaultValue={t.due_date ?? ""}
+          onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
+        />
+        <button className="danger small" onClick={() => remove(t)}>✕</button>
+      </div>
+    );
+  }
 
   return (
     <div className="pad narrow">
@@ -42,25 +64,11 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
         <button className="primary" onClick={add}>Add</button>
       </div>
 
-      {open.map((t) => (
-        <div className="todo" key={t.id}>
-          <input type="checkbox" checked={false} onChange={() => toggle(t)} />
-          <span dir="auto" className="grow">{t.source === "ai" && <span title="Extracted by AI from your conversation">✨ </span>}{t.text}</span>
-          <span className={`chip cat-${t.category}`}>{t.category}</span>
-          {t.due_date && <span className="hint">{t.due_date}</span>}
-          <button className="danger small" onClick={() => remove(t)}>✕</button>
-        </div>
-      ))}
+      {open.map(renderTodo)}
       {open.length === 0 && <p className="hint">Nothing left to do 🎉</p>}
 
       {done.length > 0 && <h3>Done</h3>}
-      {done.map((t) => (
-        <div className="todo done" key={t.id}>
-          <input type="checkbox" checked onChange={() => toggle(t)} />
-          <span dir="auto" className="grow">{t.text}</span>
-          <button className="danger small" onClick={() => remove(t)}>✕</button>
-        </div>
-      ))}
+      {done.map(renderTodo)}
     </div>
   );
 }
