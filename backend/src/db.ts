@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), "data");
+export const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new Database(path.join(DATA_DIR, "tripplanner.db"));

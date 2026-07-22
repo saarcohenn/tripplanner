@@ -1,9 +1,43 @@
 import { Router } from "express";
-import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty } from "./db.js";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
 import { planPrompt, advisorPrompt, importPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 
 export const api = Router();
+
+// Place photos are fetched once from Google and cached to disk (inside the same persisted
+// DATA_DIR volume as the SQLite DB) — there are never many places, so nothing evicts this.
+const PHOTOS_DIR = path.join(DATA_DIR, "photos");
+fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+const PHOTO_MIME_EXT: Record<string, string> = { "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+const PHOTO_EXTS = ["jpg", "png", "webp", "gif"];
+
+function photoHash(photoRef: string): string {
+  return crypto.createHash("sha256").update(photoRef).digest("hex");
+}
+
+/** Any already-cached file for this photo ref, regardless of which extension it landed on. */
+function findCachedPhoto(photoRef: string): string | null {
+  const hash = photoHash(photoRef);
+  for (const ext of PHOTO_EXTS) {
+    const p = path.join(PHOTOS_DIR, `${hash}.${ext}`);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function photoWritePath(photoRef: string, contentType: string): string {
+  const ext = PHOTO_MIME_EXT[contentType] || "jpg";
+  return path.join(PHOTOS_DIR, `${photoHash(photoRef)}.${ext}`);
+}
+
+function mimeForPath(p: string): string {
+  const ext = path.extname(p).slice(1);
+  return Object.entries(PHOTO_MIME_EXT).find(([, e]) => e === ext)?.[0] || "image/jpeg";
+}
 
 const wrap =
   (fn: (req: any, res: any) => Promise<void> | void) => async (req: any, res: any) => {
@@ -327,13 +361,25 @@ api.get("/gplaces/search", wrap(async (req, res) => {
 api.get("/places/:id/photo", wrap(async (req, res) => {
   const p: any = db.prepare("SELECT * FROM places WHERE id = ?").get(Number(req.params.id));
   if (!p?.photo_ref) throw Object.assign(new Error("No photo for this place"), { status: 404 });
+
+  const cached = findCachedPhoto(p.photo_ref);
+  if (cached) {
+    res.set("content-type", mimeForPath(cached));
+    res.set("cache-control", "public, max-age=31536000, immutable");
+    return void res.send(fs.readFileSync(cached));
+  }
+
   const r = await fetch(
     `https://places.googleapis.com/v1/${p.photo_ref}/media?maxWidthPx=640&key=${encodeURIComponent(gmapsKey())}`
   );
   if (!r.ok) throw Object.assign(new Error(`Photo fetch failed (${r.status})`), { status: 502 });
-  res.set("content-type", r.headers.get("content-type") || "image/jpeg");
-  res.set("cache-control", "private, max-age=86400");
-  res.send(Buffer.from(await r.arrayBuffer()));
+  const contentType = r.headers.get("content-type") || "image/jpeg";
+  const buf = Buffer.from(await r.arrayBuffer());
+  fs.writeFileSync(photoWritePath(p.photo_ref, contentType), buf);
+
+  res.set("content-type", contentType);
+  res.set("cache-control", "public, max-age=31536000, immutable");
+  res.send(buf);
 }));
 
 // Look up photos (and missing coordinates) for every place that doesn't have one yet.

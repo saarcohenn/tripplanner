@@ -56,6 +56,10 @@ Places are collected from an interactive map (Google Maps with English labels + 
 photos when a key is set; Leaflet/OpenStreetMap otherwise). Bookings get one-click
 Booking.com / Airbnb searches pre-filled with each city and your dates.
 
+Place photos are downloaded from Google once and cached to disk (inside the same data
+volume as the database) — repeat views are served locally instead of re-billing the
+Places Photo API.
+
 ![Place cards with photos](docs/screenshots/places-desktop.png)
 
 ### Expense tracking in your home currency
