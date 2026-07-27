@@ -407,6 +407,72 @@ api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
   res.json({ updated });
 }));
 
+// ---------- Import from a Google Maps "Saved" list (via Google Takeout export) ----------
+// Google has no live API for a user's starred/saved-places lists — the only way out is a
+// manual Takeout export (takeout.google.com → "Saved" → download → open the list's .json file
+// under Takeout/Saved/). Each list exports as a GeoJSON-ish FeatureCollection; we parse it
+// defensively since the exact shape has drifted across Takeout versions.
+type ImportCandidate = { name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string };
+
+function parseTakeoutSavedPlaces(raw: any): { items: ImportCandidate[]; skipped: number } {
+  const features = Array.isArray(raw?.features) ? raw.features : [];
+  const items: ImportCandidate[] = [];
+  let skipped = 0;
+  for (const f of features) {
+    const props = f?.properties || {};
+    const loc = props.location || {};
+    const name: string = loc.name || loc.address || props.google_maps_url || "";
+    if (!name) { skipped++; continue; }
+    const coords = f?.geometry?.coordinates;
+    const lng = Array.isArray(coords) ? Number(coords[0]) : null;
+    const lat = Array.isArray(coords) ? Number(coords[1]) : null;
+    items.push({
+      name,
+      address: loc.address || "",
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      gmaps_url: props.google_maps_url || "",
+    });
+  }
+  return { items, skipped };
+}
+
+api.post(`/trips/:id/places/import-preview`, wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  let raw: any;
+  try {
+    raw = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body.data;
+  } catch {
+    throw Object.assign(new Error("That doesn't look like valid JSON — export the list from Google Takeout and upload the .json file as-is."), { status: 400 });
+  }
+  const { items, skipped } = parseTakeoutSavedPlaces(raw);
+  if (items.length === 0) throw Object.assign(new Error("No places found in that file — make sure it's a Takeout \"Saved\" list export."), { status: 400 });
+  const existing = new Set(
+    db.prepare("SELECT name FROM places WHERE trip_id = ?").all(tripId).map((p: any) => String(p.name).trim().toLowerCase())
+  );
+  res.json({
+    items: items.map((it) => ({ ...it, exists: existing.has(it.name.trim().toLowerCase()) })),
+    skipped,
+  });
+}));
+
+api.post(`/trips/:id/places/import`, wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  const items: ImportCandidate[] = Array.isArray(req.body.items) ? req.body.items : [];
+  const category = typeof req.body.category === "string" ? req.body.category : "other";
+  if (items.length === 0) throw Object.assign(new Error("No places selected"), { status: 400 });
+  const insert = db.prepare(
+    `INSERT INTO places (trip_id, leg_id, name, category, lat, lng, duration_min, priority, notes, gmaps_url, status, source)
+     VALUES (?, NULL, ?, ?, ?, ?, 90, 'want', ?, ?, 'active', 'import')`
+  );
+  const tx = db.transaction((rows: ImportCandidate[]) => {
+    for (const it of rows) insert.run(tripId, it.name, category, it.lat, it.lng, it.address || "", it.gmaps_url || "");
+  });
+  tx(items);
+  bumpPlanVersion(tripId);
+  res.json({ imported: items.length });
+}));
+
 // ---------- FX rates (free ECB-style feed, cached 12h in the settings table) ----------
 api.get("/fx/:base", wrap(async (req, res) => {
   const base = String(req.params.base).toUpperCase();

@@ -6,6 +6,7 @@ import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
 type NameHit = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
+type ImportCandidate = { name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string; exists: boolean };
 
 function FilterIcon() {
   return (
@@ -30,6 +31,60 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [gateOpen, setGateOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const autoFetchedTrip = useRef<number | null>(null);
+
+  // ---- import a Google Maps "Saved" list (via a Takeout .json export) ----
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importItems, setImportItems] = useState<ImportCandidate[] | null>(null);
+  const [importSkipped, setImportSkipped] = useState(0);
+  const [importSelected, setImportSelected] = useState<Set<number>>(new Set());
+  const [importCategory, setImportCategory] = useState("sight");
+  const [importing, setImporting] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  async function onImportFile(file: File) {
+    setImportFileName(file.name);
+    setImportError("");
+    setImportItems(null);
+    setImportBusy(true);
+    try {
+      const text = await file.text();
+      const r = await api.post<{ items: ImportCandidate[]; skipped: number }>(`/trips/${trip.id}/places/import-preview`, { data: text });
+      setImportItems(r.items);
+      setImportSkipped(r.skipped);
+      setImportSelected(new Set(r.items.map((it, i) => i).filter((i) => !r.items[i].exists)));
+    } catch (e: any) {
+      setImportError(e.message || "Couldn't read that file");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  function toggleImportSelected(i: number) {
+    setImportSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  }
+
+  async function doImport() {
+    if (!importItems || importSelected.size === 0) return;
+    setImporting(true);
+    try {
+      const items = importItems.filter((_, i) => importSelected.has(i));
+      await api.post(`/trips/${trip.id}/places/import`, { items, category: importCategory });
+      setImportItems(null);
+      setImportOpen(false);
+      await refresh();
+    } catch (e: any) {
+      setImportError(e.message || "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   // ---- filters: name (with an autocomplete dropdown), category, city — tucked behind a filter button ----
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -280,7 +335,59 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
         </div>
       )}
 
-      <button className="primary" onClick={() => setAddOpen((v) => !v)}>{addOpen ? "− Close" : "+ Add place"}</button>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="primary" onClick={() => setAddOpen((v) => !v)}>{addOpen ? "− Close" : "+ Add place"}</button>
+        <button onClick={() => setImportOpen((v) => !v)}>{importOpen ? "− Close" : "⤓ Import from Google Maps"}</button>
+      </div>
+
+      {importOpen && (
+        <div className="add-row" style={{ display: "block" }}>
+          <p className="hint">
+            Google doesn't offer a live API for your Saved/Starred lists — export one via{" "}
+            <strong>takeout.google.com</strong> (deselect all, pick only "Saved", export, then open the list's
+            <code>.json</code> file inside <code>Takeout/Saved/</code>) and upload it here.
+          </p>
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <input
+              ref={importFileRef} type="file" accept=".json,application/json" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ""; }}
+            />
+            <button className="primary" onClick={() => importFileRef.current?.click()}>⬆ Choose file</button>
+            {importFileName && <span className="hint" dir="auto">{importFileName}</span>}
+          </div>
+          {importBusy && <p className="hint">Reading file…</p>}
+          {importError && <p className="hint" style={{ color: "var(--danger, #c93b3b)" }}>{importError}</p>}
+          {importItems && (
+            <>
+              <div className="row spread" style={{ marginTop: 8 }}>
+                <p className="hint">
+                  Found {importItems.length} place{importItems.length === 1 ? "" : "s"}
+                  {importSkipped > 0 ? ` (${importSkipped} skipped — no name/address)` : ""}. Already-in-trip places are unchecked.
+                </p>
+                <label className="block">Add as category
+                  <select value={importCategory} onChange={(e) => setImportCategory(e.target.value)}>
+                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border, #333)", borderRadius: 8, padding: 8 }}>
+                {importItems.map((it, i) => (
+                  <label key={i} className="row" style={{ gap: 8, padding: "4px 0" }} dir="auto">
+                    <input type="checkbox" checked={importSelected.has(i)} onChange={() => toggleImportSelected(i)} />
+                    <span className="grow">
+                      <strong>{it.name}</strong>{it.exists && <span className="hint"> — already in trip</span>}
+                      {it.address && <div className="hint">{it.address}</div>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button className="primary" disabled={importing || importSelected.size === 0} onClick={doImport} style={{ marginTop: 8 }}>
+                {importing ? "Importing…" : `Import ${importSelected.size} selected`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {addOpen && (
         <div className="add-row">
