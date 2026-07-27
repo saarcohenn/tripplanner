@@ -287,6 +287,16 @@ a { color: var(--accent-dark); }
 .chip-toggle:hover:not(:disabled) { border-color: var(--accent); box-shadow: none; }
 .chip-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+.icon-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; flex: 0 0 auto;
+}
+.icon-btn.active { border-color: var(--accent); color: var(--accent-dark); background: var(--accent-tint); }
+.icon-btn .badge-dot {
+  position: absolute; top: 5px; right: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--card);
+}
+
 input.subtle, select.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
 input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
 
