@@ -1,3 +1,12 @@
+export type User = {
+  id: number;
+  email: string;
+  display_name: string;
+  role: "admin" | "user";
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
 export type Trip = {
   id: number;
   name: string;

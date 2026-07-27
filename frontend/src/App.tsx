@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { PlanJob, Settings, Trip, TripDetail } from "./types";
+import type { PlanJob, Settings, Trip, TripDetail, User } from "./types";
 import OverviewTab from "./components/OverviewTab";
 import MapTab from "./components/MapTab";
 import PlacesTab from "./components/PlacesTab";
@@ -10,6 +10,8 @@ import BookingsTab from "./components/BookingsTab";
 import ExpensesTab from "./components/ExpensesTab";
 import ImportTab from "./components/ImportTab";
 import SettingsTab from "./components/SettingsTab";
+import SetupAdminForm from "./components/SetupAdminForm";
+import AuthGate from "./components/AuthGate";
 
 const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Settings"] as const;
 type Tab = (typeof TABS)[number];
@@ -18,6 +20,29 @@ const TRIP_TABS: Tab[] = ["Overview", "Map", "Places", "Plan", "Todos", "Booking
 const APP_TABS: Tab[] = ["Import", "Settings"];
 
 export default function App() {
+  const [authState, setAuthState] = useState<"checking" | "needsSetup" | "loggedOut" | "ready">("checking");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const bootstrap = await api.get<{ needsSetup: boolean }>("/auth/bootstrap-status");
+      if (bootstrap.needsSetup) return setAuthState("needsSetup");
+      const me = await api.get<{ user: User | null }>("/auth/me");
+      if (me.user) {
+        setCurrentUser(me.user);
+        setAuthState("ready");
+      } else {
+        setAuthState("loggedOut");
+      }
+    })().catch(() => setAuthState("loggedOut"));
+  }, []);
+
+  async function logout() {
+    await api.post("/auth/logout");
+    setCurrentUser(null);
+    setAuthState("loggedOut");
+  }
+
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<TripDetail | null>(null);
@@ -51,9 +76,9 @@ export default function App() {
     setSettings(await api.get<Settings>("/settings"));
   }, []);
 
-  useEffect(() => { loadTrips().catch((e) => setError(String(e.message))); }, [loadTrips]);
-  useEffect(() => { loadDetail().catch((e) => setError(String(e.message))); }, [loadDetail]);
-  useEffect(() => { loadSettings().catch(() => {}); }, [loadSettings]);
+  useEffect(() => { if (authState === "ready") loadTrips().catch((e) => setError(String(e.message))); }, [loadTrips, authState]);
+  useEffect(() => { if (authState === "ready") loadDetail().catch((e) => setError(String(e.message))); }, [loadDetail, authState]);
+  useEffect(() => { if (authState === "ready") loadSettings().catch(() => {}); }, [loadSettings, authState]);
 
   /** Call after any mutation: refresh data; the plan-watcher effect below reacts to version drift. */
   const refresh = useCallback(async () => {
@@ -138,6 +163,14 @@ export default function App() {
     await loadTrips();
   }
 
+  if (authState === "checking") return null;
+  if (authState === "needsSetup") {
+    return <SetupAdminForm onDone={(user) => { setCurrentUser(user); setAuthState("ready"); }} />;
+  }
+  if (authState === "loggedOut") {
+    return <AuthGate onLogin={(user) => { setCurrentUser(user); setAuthState("ready"); }} />;
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -166,6 +199,7 @@ export default function App() {
         </ul>
         <div className="sidebar-footer">
           {!llmReady && <p className="hint">⚠ No LLM key set — plan generation disabled. Add one in Settings.</p>}
+          <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email} <button className="inline" onClick={logout}>Log out</button></p>
         </div>
       </aside>
 
@@ -230,7 +264,7 @@ export default function App() {
         {tab === "Import" ? (
           <ImportTab onImported={async (tripId) => { await loadTrips(); setSelectedId(tripId); setTab("Overview"); }} />
         ) : tab === "Settings" ? (
-          <SettingsTab settings={settings} reload={loadSettings} />
+          <SettingsTab settings={settings} reload={loadSettings} currentUser={currentUser} />
         ) : !detail ? (
           <p className="hint pad">Select or create a trip.</p>
         ) : tab === "Overview" ? (

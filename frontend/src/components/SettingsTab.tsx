@@ -1,7 +1,78 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { LlmUsage, ProviderPlan, Settings } from "../types";
+import type { LlmUsage, ProviderPlan, Settings, User } from "../types";
 import CurrencySelect from "./CurrencySelect";
+
+const STATUS_LABEL: Record<string, string> = { pending: "⏳ Pending", approved: "✅ Approved", rejected: "🚫 Rejected" };
+
+function AdminUsersPanel({ currentUser }: { currentUser: User }) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const reload = () => api.get<User[]>("/admin/users").then(setUsers).catch(() => {});
+  useEffect(() => { reload(); }, []);
+
+  async function setStatus(id: number, action: "approve" | "reject") {
+    setBusyId(id);
+    try {
+      await api.post(`/admin/users/${id}/${action}`);
+      await reload();
+    } catch (e: any) {
+      window.alert(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setRole(id: number, role: "admin" | "user") {
+    setBusyId(id);
+    try {
+      await api.post(`/admin/users/${id}/role`, { role });
+      await reload();
+    } catch (e: any) {
+      window.alert(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="pad narrow">
+      <h2>Users</h2>
+      <p className="hint">New signups need your approval before they can log in.</p>
+      <table className="table">
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id}>
+              <td dir="auto"><strong>{u.display_name || u.email}</strong><div className="hint">{u.email}</div></td>
+              <td>{STATUS_LABEL[u.status] || u.status}</td>
+              <td>{u.role}</td>
+              <td className="row" style={{ gap: 6 }}>
+                {u.status === "pending" && (
+                  <>
+                    <button className="small" disabled={busyId === u.id} onClick={() => setStatus(u.id, "approve")}>Approve</button>
+                    <button className="danger small" disabled={busyId === u.id} onClick={() => setStatus(u.id, "reject")}>Reject</button>
+                  </>
+                )}
+                {u.status === "approved" && u.id !== currentUser.id && (
+                  <>
+                    {u.role === "user" ? (
+                      <button className="small" disabled={busyId === u.id} onClick={() => setRole(u.id, "admin")}>Make admin</button>
+                    ) : (
+                      <button className="small" disabled={busyId === u.id} onClick={() => setRole(u.id, "user")}>Remove admin</button>
+                    )}
+                    <button className="danger small" disabled={busyId === u.id} onClick={() => setStatus(u.id, "reject")}>Disable</button>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {users.length === 0 && <p className="hint">No users yet.</p>}
+    </div>
+  );
+}
 
 const PROVIDERS = [
   { id: "anthropic", label: "Anthropic (Claude)" },
@@ -159,7 +230,7 @@ function UsageSection({ usage, priceIn, setPriceIn, priceOut, setPriceOut, month
   );
 }
 
-export default function SettingsTab({ settings, reload }: { settings: Settings | null; reload: () => Promise<void> }) {
+export default function SettingsTab({ settings, reload, currentUser }: { settings: Settings | null; reload: () => Promise<void>; currentUser: User | null }) {
   const [provider, setProvider] = useState("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
@@ -251,6 +322,7 @@ export default function SettingsTab({ settings, reload }: { settings: Settings |
 
   return (
     <div className="pad narrow">
+      {currentUser?.role === "admin" && <AdminUsersPanel currentUser={currentUser} />}
       <h2>LLM connection</h2>
       <p className="hint">
         Your key is stored only in this app's own database on your server and used server-side to call the

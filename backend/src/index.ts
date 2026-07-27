@@ -3,11 +3,13 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { api } from "./routes.js";
+import { authRouter } from "./authRoutes.js";
 
 const app = express();
 app.use(express.json({ limit: "5mb" }));
-app.use("/api", api);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.use("/api/auth", authRouter);
+app.use("/api", api);
 
 // In the Docker image the built frontend is copied next to dist/ as public/.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

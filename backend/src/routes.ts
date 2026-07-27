@@ -5,8 +5,10 @@ import path from "node:path";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
 import { planPrompt, advisorPrompt, importPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
+import { requireUser, requireAdmin, safeUser } from "./auth.js";
 
 export const api = Router();
+api.use(requireUser);
 
 // Place photos are fetched once from Google and cached to disk (inside the same persisted
 // DATA_DIR volume as the SQLite DB) — there are never many places, so nothing evicts this.
@@ -47,6 +49,36 @@ const wrap =
       res.status(e.status || 500).json({ error: e.message || String(e) });
     }
   };
+
+// ---------- admin: approve/reject signups, manage roles ----------
+api.get("/admin/users", requireAdmin, wrap((_req, res) => {
+  const users = db.prepare("SELECT * FROM users ORDER BY created_at DESC").all() as any[];
+  res.json(users.map(safeUser));
+}));
+
+api.post("/admin/users/:id/approve", requireAdmin, wrap((req, res) => {
+  db.prepare("UPDATE users SET status = 'approved' WHERE id = ?").run(Number(req.params.id));
+  res.json({ ok: true });
+}));
+
+api.post("/admin/users/:id/reject", requireAdmin, wrap((req, res) => {
+  db.prepare("UPDATE users SET status = 'rejected' WHERE id = ?").run(Number(req.params.id));
+  res.json({ ok: true });
+}));
+
+api.post("/admin/users/:id/role", requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  const role = req.body.role === "admin" ? "admin" : "user";
+  if (role === "user") {
+    const admins = (db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'").get() as { c: number }).c;
+    const target = db.prepare("SELECT role FROM users WHERE id = ?").get(id) as { role: string } | undefined;
+    if (target?.role === "admin" && admins <= 1) {
+      throw Object.assign(new Error("Can't demote the last remaining admin"), { status: 400 });
+    }
+  }
+  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+  res.json({ ok: true });
+}));
 
 function getBundle(tripId: number): TripBundle {
   const trip = db.prepare("SELECT * FROM trips WHERE id = ?").get(tripId);
