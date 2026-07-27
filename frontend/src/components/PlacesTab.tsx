@@ -18,6 +18,58 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [gateOpen, setGateOpen] = useState(false);
   const autoFetchedTrip = useRef<number | null>(null);
 
+  // ---- filters: name (with an autocomplete dropdown), category, city ----
+  const [nameFilter, setNameFilter] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = useState<Set<number | null>>(new Set());
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) setShowSuggestions(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
+  const suggestions = nameFilter.trim()
+    ? Array.from(new Set(
+        places
+          .filter((p) => p.name.toLowerCase().includes(nameFilter.trim().toLowerCase()))
+          .map((p) => p.name)
+      )).slice(0, 8)
+    : [];
+
+  function toggleCat(cat: string) {
+    setCatFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      return next;
+    });
+  }
+  function toggleCity(legId: number | null) {
+    setCityFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(legId)) next.delete(legId); else next.add(legId);
+      return next;
+    });
+  }
+  function clearFilters() {
+    setNameFilter("");
+    setCatFilter(new Set());
+    setCityFilter(new Set());
+  }
+
+  const anyFilterActive = !!nameFilter.trim() || catFilter.size > 0 || cityFilter.size > 0;
+  function matchesFilters(p: Place) {
+    if (nameFilter.trim() && !p.name.toLowerCase().includes(nameFilter.trim().toLowerCase())) return false;
+    if (catFilter.size > 0 && !catFilter.has(p.category)) return false;
+    if (cityFilter.size > 0 && !cityFilter.has(p.leg_id)) return false;
+    return true;
+  }
+
   // Auto-fetch missing photos once per trip when the page renders with a Maps key.
   useEffect(() => {
     if (!gmapsKey || fetchingPhotos) return;
@@ -72,17 +124,69 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     byLeg.set(k, [...(byLeg.get(k) || []), p]);
   }
   const groups: { label: string; items: Place[] }[] = [
-    ...legs.map((l) => ({ label: `${l.city}${l.country ? `, ${l.country}` : ""}`, items: byLeg.get(l.id) || [] })),
-    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)! }] : []),
-  ];
+    ...legs.map((l) => ({ label: `${l.city}${l.country ? `, ${l.country}` : ""}`, items: (byLeg.get(l.id) || []).filter(matchesFilters) })),
+    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)!.filter(matchesFilters) }] : []),
+  ].filter((g) => !anyFilterActive || g.items.length > 0);
 
   return (
     <div className="pad">
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
       <div className="row spread">
-        <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
+        <h2>
+          Places ({places.filter((p) => p.status === "active").length} active)
+          {anyFilterActive && (
+            <span className="hint"> — showing {places.filter(matchesFilters).length} match{places.filter(matchesFilters).length === 1 ? "" : "es"}</span>
+          )}
+        </h2>
         {fetchingPhotos && <span className="hint">📷 Fetching photos…</span>}
       </div>
+
+      <div className="filter-bar">
+        <div className="filter-search" ref={searchWrapRef}>
+          <input
+            dir="auto" placeholder="🔍 Search places…" value={nameFilter}
+            onChange={(e) => { setNameFilter(e.target.value); setShowSuggestions(true); setHighlightIdx(-1); }}
+            onFocus={() => setShowSuggestions(true)}
+            onKeyDown={(e) => {
+              if (!showSuggestions || suggestions.length === 0) {
+                if (e.key === "Escape") setShowSuggestions(false);
+                return;
+              }
+              if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((i) => Math.min(i + 1, suggestions.length - 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((i) => Math.max(i - 1, 0)); }
+              else if (e.key === "Enter" && highlightIdx >= 0) { setNameFilter(suggestions[highlightIdx]); setShowSuggestions(false); }
+              else if (e.key === "Escape") setShowSuggestions(false);
+            }}
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <ul className="autocomplete">
+              {suggestions.map((s, i) => (
+                <li key={s} className={i === highlightIdx ? "active" : ""} dir="auto"
+                  onClick={() => { setNameFilter(s); setShowSuggestions(false); }}>
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="filter-chips">
+          {CATEGORIES.map((c) => (
+            <button key={c} className={`chip-toggle${catFilter.has(c) ? " active" : ""}`} onClick={() => toggleCat(c)}>{c}</button>
+          ))}
+        </div>
+        {legs.length > 0 && (
+          <div className="filter-chips">
+            {legs.map((l) => (
+              <button key={l.id} dir="auto" className={`chip-toggle${cityFilter.has(l.id) ? " active" : ""}`} onClick={() => toggleCity(l.id)}>{l.city}</button>
+            ))}
+            {byLeg.has(null) && (
+              <button className={`chip-toggle${cityFilter.has(null) ? " active" : ""}`} onClick={() => toggleCity(null)}>🌍 Unassigned</button>
+            )}
+          </div>
+        )}
+        {anyFilterActive && <button className="small" onClick={clearFilters}>Clear filters ✕</button>}
+      </div>
+
       <div className="add-row">
         <input dir="auto" placeholder="Place name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
@@ -98,6 +202,10 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
         </select>
         <button className="primary" onClick={addPlace}>Add</button>
       </div>
+
+      {anyFilterActive && groups.length === 0 && (
+        <p className="hint">No places match your filters. <button className="small" onClick={clearFilters}>Clear filters</button></p>
+      )}
 
       {groups.map((g) => (
         <div key={g.label}>
