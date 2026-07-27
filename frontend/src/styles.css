@@ -203,7 +203,14 @@ a { color: var(--accent-dark); }
 .todo input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 
 /* ---------- map ---------- */
-.map-layout { display: flex; flex: 1; min-height: 0; }
+/* Framed as one rounded card (like every other panel in the app) instead of sitting
+   edge-to-edge against the sidebar and tab bar. */
+.map-layout {
+  display: flex; flex: 1; min-height: 0;
+  margin: 14px 22px 22px;
+  border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-lg); overflow: hidden;
+}
 .map-side {
   width: 310px; min-width: 310px; padding: 14px; overflow-y: auto;
   background: var(--bg); border-right: 1px solid var(--border);
@@ -505,7 +512,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   .banner { margin: 6px 12px 0; padding: 7px 12px; font-size: 12px; border-radius: 8px; }
 
   /* Stack the split layouts */
-  .map-layout { flex-direction: column; }
+  .map-layout { flex-direction: column; margin: 8px 10px calc(16px + env(safe-area-inset-bottom)); border-radius: 12px; }
   .map-side {
     width: 100%; min-width: 0; max-height: 45%;
     border-right: none; border-bottom: 1px solid var(--border);

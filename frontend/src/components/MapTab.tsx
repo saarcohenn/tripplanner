@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from "react-leaflet";
 import type { LatLngExpression } from "leaflet";
-import { APIProvider, Map as GMap, Marker, InfoWindow } from "@vis.gl/react-google-maps";
+import { APIProvider, Map as GMap, Marker, InfoWindow, ControlPosition } from "@vis.gl/react-google-maps";
 import { api, gmapsLink, parseGmapsUrl } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
@@ -202,6 +202,12 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
             defaultCenter={center}
             defaultZoom={6}
             gestureHandling="greedy"
+            // Pin every control to a fixed corner explicitly — otherwise Google Maps mirrors
+            // this layout for RTL browser locales (e.g. Hebrew), scattering the buttons.
+            mapTypeControlOptions={{ position: ControlPosition.TOP_LEFT }}
+            zoomControlOptions={{ position: ControlPosition.RIGHT_BOTTOM }}
+            fullscreenControlOptions={{ position: ControlPosition.TOP_RIGHT }}
+            streetViewControlOptions={{ position: ControlPosition.RIGHT_BOTTOM }}
             onClick={(e) => {
               const ll = e.detail.latLng;
               if (ll) setPending({ lat: ll.lat, lng: ll.lng, name: "" });
