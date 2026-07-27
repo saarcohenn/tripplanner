@@ -21,6 +21,20 @@ export type LlmDefaults = {
   default_plan_system_prompt: string;
 };
 
+export type Room = {
+  id: number;
+  name: string;
+  owner_id: number;
+  created_at: string;
+};
+
+export type RoomMember = {
+  id: number;
+  email: string;
+  display_name: string;
+  role: "owner" | "member";
+};
+
 export type Trip = {
   id: number;
   name: string;
@@ -33,6 +47,7 @@ export type Trip = {
   notes: string;
   plan_version: number;
   stage: "collect" | "planned";
+  room_id: number | null;
   created_at: string;
   updated_at: string;
 };

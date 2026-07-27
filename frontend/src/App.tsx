@@ -11,10 +11,11 @@ import ExpensesTab from "./components/ExpensesTab";
 import ImportTab from "./components/ImportTab";
 import SettingsTab from "./components/SettingsTab";
 import ProfileTab from "./components/ProfileTab";
+import RoomsTab from "./components/RoomsTab";
 import SetupAdminForm from "./components/SetupAdminForm";
 import AuthGate from "./components/AuthGate";
 
-const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Profile", "Settings"] as const;
+const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Rooms", "Profile", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 /** Pages scoped to the selected trip vs. app-wide pages (drawer groups them separately). */
 const TRIP_TABS: Tab[] = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses"];
@@ -46,8 +47,8 @@ export default function App() {
   // App-wide (not trip-scoped) pages, drawer-grouped separately from TRIP_TABS. Settings is
   // admin-only global config; everyone else manages their own LLM key/budget/prompt in Profile.
   const APP_TABS: Tab[] = currentUser?.role === "admin"
-    ? ["Import", "Profile", "Settings"]
-    : ["Import", "Profile"];
+    ? ["Import", "Rooms", "Profile", "Settings"]
+    : ["Import", "Rooms", "Profile"];
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -273,6 +274,8 @@ export default function App() {
 
         {tab === "Import" ? (
           <ImportTab onImported={async (tripId) => { await loadTrips(); setSelectedId(tripId); setTab("Overview"); }} />
+        ) : tab === "Rooms" ? (
+          <RoomsTab currentUser={currentUser!} />
         ) : tab === "Profile" ? (
           <ProfileTab currentUser={currentUser!} onUserUpdate={setCurrentUser} logout={logout} />
         ) : tab === "Settings" ? (

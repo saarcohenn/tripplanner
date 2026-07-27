@@ -144,6 +144,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS rooms (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+  room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member',  -- owner | member
+  added_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (room_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
 `);
 
 // A job still marked "running" from before this process started can never finish — its in-memory
@@ -178,6 +194,31 @@ addColumn("users", "plan_system_prompt TEXT");
 addColumn("users", "home_currency TEXT DEFAULT 'USD'");
 addColumn("users", "auto_replan TEXT DEFAULT '0'");
 addColumn("llm_usage", "user_id INTEGER REFERENCES users(id)");
+addColumn("trips", "room_id INTEGER REFERENCES rooms(id)");
+
+// Safety-net migration (idempotent, runs every boot): every approved user should have a personal
+// room. New users normally get one the moment they're approved (see ensurePersonalRoom in
+// rooms.ts), but any approved user still missing one — most importantly whoever was already an
+// admin before rooms existed — gets one created here. Pre-existing trips (from the single-tenant
+// era, room_id still NULL) are assigned to the first admin's room so upgrading an existing install
+// doesn't hide the trips that were already there.
+{
+  const approved = db.prepare("SELECT id, display_name, email FROM users WHERE status = 'approved'").all() as
+    { id: number; display_name: string; email: string }[];
+  for (const u of approved) {
+    const already = db.prepare("SELECT id FROM rooms WHERE owner_id = ?").get(u.id) as { id: number } | undefined;
+    if (already) continue;
+    const label = u.display_name || u.email;
+    const r = db.prepare("INSERT INTO rooms (name, owner_id) VALUES (?, ?)").run(`${label}'s trips`, u.id);
+    db.prepare("INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, 'owner')").run(r.lastInsertRowid, u.id);
+  }
+  const firstAdminRoom = db.prepare(
+    `SELECT r.id FROM rooms r JOIN users u ON u.id = r.owner_id WHERE u.role = 'admin' ORDER BY r.id LIMIT 1`
+  ).get() as { id: number } | undefined;
+  if (firstAdminRoom) {
+    db.prepare("UPDATE trips SET room_id = ? WHERE room_id IS NULL").run(firstAdminRoom.id);
+  }
+}
 
 // One-time migration: the LLM connection, budget and plan-prompt settings used to live in the
 // global `settings` table (single-tenant era) — now they're per-user (Profile page). Copy the old
@@ -230,14 +271,15 @@ export function recordLlmUsage(
   ).run(userId, provider, model, purpose, Math.round(inputTokens || 0), Math.round(outputTokens || 0));
 }
 
-export function seedDemoIfEmpty() {
+/** Seeds a demo trip into `roomId` the first time ever a trips table is completely empty. */
+export function seedDemoIfEmpty(roomId: number) {
   const count = (db.prepare("SELECT COUNT(*) AS c FROM trips").get() as { c: number }).c;
   if (count > 0) return;
 
   const trip = db
     .prepare(
-      `INSERT INTO trips (name, trip_type, start_date, end_date, home_city, budget, currency, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO trips (name, trip_type, start_date, end_date, home_city, budget, currency, notes, room_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       "Demo: South Korea & Japan",
@@ -247,7 +289,8 @@ export function seedDemoIfEmpty() {
       "Tel Aviv",
       6000,
       "USD",
-      "Demo trip seeded so the UI is not empty. Replace it by importing your real plan (Import tab) or editing it here."
+      "Demo trip seeded so the UI is not empty. Replace it by importing your real plan (Import tab) or editing it here.",
+      roomId
     );
   const tripId = Number(trip.lastInsertRowid);
 

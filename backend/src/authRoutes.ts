@@ -4,6 +4,7 @@ import {
   clearSidCookie, createSession, getUserBySession, hashPassword,
   parseSidCookie, safeUser, setSidCookie, verifyPassword, UserRow,
 } from "./auth.js";
+import { ensurePersonalRoom } from "./rooms.js";
 
 export const authRouter = Router();
 
@@ -32,6 +33,7 @@ authRouter.post("/setup", wrap((req, res) => {
     `INSERT INTO users (email, password_hash, display_name, role, status) VALUES (?, ?, ?, 'admin', 'approved')`
   ).run(String(email).toLowerCase().trim(), hashPassword(password), display_name || "");
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(r.lastInsertRowid) as UserRow;
+  ensurePersonalRoom(user.id, user.display_name, user.email);
   setSidCookie(res, createSession(user.id));
   res.json({ user: safeUser(user) });
 }));
