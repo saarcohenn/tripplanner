@@ -210,7 +210,7 @@ export default function App() {
         </ul>
         <div className="sidebar-footer">
           {!llmReady && <p className="hint">⚠ No LLM key set — plan generation disabled. Add one in Profile.</p>}
-          <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email} <button className="inline" onClick={logout}>Log out</button></p>
+          <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email}</p>
         </div>
       </aside>
 
@@ -254,9 +254,14 @@ export default function App() {
 
       <main className="main">
         <nav className="tabs">
-          {[...TRIP_TABS, ...APP_TABS].map((t) => (
+          {TRIP_TABS.map((t) => (
             <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>{t}</button>
           ))}
+          <span className="tabs-account">
+            {APP_TABS.map((t) => (
+              <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>{t}</button>
+            ))}
+          </span>
         </nav>
 
         {error && <div className="banner error" onClick={() => setError(null)}>{error} ✕</div>}

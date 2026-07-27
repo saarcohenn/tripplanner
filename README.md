@@ -33,10 +33,11 @@ EOF
 echo "GOOGLE_MAPS_API_KEY=your-browser-key-here" > .env
 
 docker compose up -d
-# open http://localhost:8080 → Settings → paste your LLM API key
+# open http://localhost:8080 — first visit prompts you to create the admin account,
+# then add your LLM key under Profile
 ```
 
-That's it. Everything (trips, settings, your API keys) lives in the `tripplanner-data`
+That's it. Everything (trips, accounts, your API keys) lives in the `tripplanner-data`
 volume; the `.env` file stays on your machine and is never baked into the image.
 
 ## What it does
@@ -48,7 +49,8 @@ volume; the `.env` file stays on your machine and is never baked into the image.
 | **Multi-city trips** | A trip is an ordered list of legs (city + date range). One-way, round-trip and multi-city all work. |
 | **Money** | Log expenses in any currency (trip-local currencies suggested first), booking costs included automatically, everything converted to **your home currency** at daily rates and tracked against the trip budget. |
 | **Import** | Paste a planning conversation (Claude / ChatGPT / any language, Hebrew included) and the LLM extracts destinations, dates, places, budget and todos into a new trip. Nothing is invented. |
-| **BYO LLM** | Anthropic, OpenAI, Google Gemini or OpenRouter. Keys are stored only in the app's SQLite DB on your server and used server-side. |
+| **BYO LLM** | Anthropic, OpenAI, Google Gemini or OpenRouter. Keys are per-user, stored only in the app's SQLite DB on your server, and used server-side. |
+| **Multi-user & rooms** | The first account created becomes the admin; anyone else can sign up but needs admin approval. Each user brings their own LLM key/budget/prompt. **Rooms** hold one or more trips shared with the people you invite — invite someone to a room and they get access to everything in it. |
 
 ### Places with photos, map, bookings
 
@@ -82,12 +84,25 @@ Installable on iOS/Android (Add to Home Screen). Drawer navigation with a
 
 ## First-time setup
 
-1. Open **Settings** → pick your LLM provider, paste the API key, **Save**, then **Test**.
-   Use **Load model list** to pick a model from the provider's live catalog.
-2. Set your **home currency** (Settings → Money) — all spending is converted to it.
-3. Optionally add a Google Maps key (env var or Settings) for Google tiles + photos.
+1. **First visit ever**: you'll be asked to create the admin account (email + password).
+   That's the only account that exists until you approve others.
+2. Open **Profile** → pick your LLM provider, paste the API key, **Save**, then **Test**.
+   Use **Load model list** to pick a model from the provider's live catalog. Set your
+   **home currency** here too — all spending is converted to it.
+3. Optionally add a Google Maps key (env var or **Settings**, admin-only) for Google
+   tiles + photos — this is shared across every user on the server.
 4. Create a trip (or **Import** one from a planning conversation), add legs in
    **Overview**, add places from the **Map**/**Places** tab, then **Plan → Generate**.
+5. Sharing a trip with someone else? Open **Rooms**, create a room (or use your default
+   personal one), invite them by email, and create/move trips into it — every member of
+   a room can see and edit every trip inside it, using their own LLM key.
+
+### Adding more people
+
+Anyone can sign up, but new accounts sit in **pending** until an admin approves them
+from **Settings → Users**. From there you can also promote/demote admins or disable an
+account. There's no invite-by-admin flow — people create their own account and wait for
+approval.
 
 ## Deployment
 
@@ -139,5 +154,6 @@ Dockerfile  multi-stage: builds frontend, compiles backend, single runtime image
 
 The backend proxies all LLM calls server-side (`/api/trips/:id/generate-plan`,
 `/api/trips/:id/advise`, `/api/import/conversation`), so API keys never reach the
-browser — `GET /api/settings` returns only a masked fingerprint. FX rates come from a
-free daily-rates API, cached server-side for 12 h.
+browser — `GET /api/auth/me` returns only a masked fingerprint of your key. Sessions are
+plain server-side tokens in an httpOnly cookie (no JWT, no third-party auth). FX rates
+come from a free daily-rates API, cached server-side for 12 h.
