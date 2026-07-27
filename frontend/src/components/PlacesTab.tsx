@@ -5,6 +5,18 @@ import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
+type NameHit = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
+
+function FilterIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="4" y1="6" x2="20" y2="6" /><circle cx="16" cy="6" r="2" fill="currentColor" stroke="none" />
+      <line x1="4" y1="12" x2="20" y2="12" /><circle cx="9" cy="12" r="2" fill="currentColor" stroke="none" />
+      <line x1="4" y1="18" x2="20" y2="18" /><circle cx="14" cy="18" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generatePlan }: {
   detail: TripDetail;
   refresh: () => Promise<void>;
@@ -16,7 +28,121 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [form, setForm] = useState({ name: "", leg_id: "" as number | "", category: "sight", duration_min: 90, priority: "want", notes: "" });
   const [fetchingPhotos, setFetchingPhotos] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const autoFetchedTrip = useRef<number | null>(null);
+
+  // ---- filters: name (with an autocomplete dropdown), category, city — tucked behind a filter button ----
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [nameFilter, setNameFilter] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = useState<Set<number | null>>(new Set());
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) setShowSuggestions(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
+  const suggestions = nameFilter.trim()
+    ? Array.from(new Set(
+        places
+          .filter((p) => p.name.toLowerCase().includes(nameFilter.trim().toLowerCase()))
+          .map((p) => p.name)
+      )).slice(0, 8)
+    : [];
+
+  function toggleCat(cat: string) {
+    setCatFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      return next;
+    });
+  }
+  function toggleCity(legId: number | null) {
+    setCityFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(legId)) next.delete(legId); else next.add(legId);
+      return next;
+    });
+  }
+  function clearFilters() {
+    setNameFilter("");
+    setCatFilter(new Set());
+    setCityFilter(new Set());
+  }
+
+  const anyFilterActive = !!nameFilter.trim() || catFilter.size > 0 || cityFilter.size > 0;
+  function matchesFilters(p: Place) {
+    if (nameFilter.trim() && !p.name.toLowerCase().includes(nameFilter.trim().toLowerCase())) return false;
+    if (catFilter.size > 0 && !catFilter.has(p.category)) return false;
+    if (cityFilter.size > 0 && !cityFilter.has(p.leg_id)) return false;
+    return true;
+  }
+
+  // ---- add-place name intellisense: Google Places when a Maps key is set, OpenStreetMap
+  // (Nominatim) fallback otherwise — same provider split MapTab's search already uses. ----
+  const [nameHits, setNameHits] = useState<NameHit[]>([]);
+  const [nameSearching, setNameSearching] = useState(false);
+  const [showNameHits, setShowNameHits] = useState(false);
+  const [nameHitIdx, setNameHitIdx] = useState(-1);
+  const [picked, setPicked] = useState<{ lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string } | null>(null);
+  const addNameWrapRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<number | null>(null);
+  const skipNextSearchRef = useRef(false);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (addNameWrapRef.current && !addNameWrapRef.current.contains(e.target as Node)) setShowNameHits(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
+  // Debounced live search as the user types the new place's name.
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    // Picking a suggestion sets form.name too, which would otherwise re-trigger this same
+    // effect and immediately re-search/reopen the dropdown for the name just picked.
+    if (skipNextSearchRef.current) { skipNextSearchRef.current = false; return; }
+    const q = form.name.trim();
+    if (!addOpen || q.length < 2) { setNameHits([]); return; }
+    debounceRef.current = window.setTimeout(async () => {
+      setNameSearching(true);
+      try {
+        if (gmapsKey) {
+          const r = await api.get<any[]>(`/gplaces/search?q=${encodeURIComponent(q)}`);
+          setNameHits(r.map((p) => ({ name: p.name, address: p.address, lat: p.lat, lng: p.lng, google_place_id: p.place_id, photo_ref: p.photo_ref })));
+        } else {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`,
+            { headers: { accept: "application/json" } }
+          );
+          const rows: { display_name: string; lat: string; lon: string }[] = await res.json();
+          setNameHits(rows.map((row) => ({ name: row.display_name.split(",")[0], address: row.display_name, lat: parseFloat(row.lat), lng: parseFloat(row.lon) })));
+        }
+        setShowNameHits(true);
+        setNameHitIdx(-1);
+      } catch {
+        setNameHits([]);
+      } finally {
+        setNameSearching(false);
+      }
+    }, 350);
+    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
+  }, [form.name, addOpen, gmapsKey]);
+
+  function pickNameHit(hit: NameHit) {
+    skipNextSearchRef.current = true;
+    setForm({ ...form, name: hit.name });
+    setPicked({ lat: hit.lat, lng: hit.lng, google_place_id: hit.google_place_id, photo_ref: hit.photo_ref });
+    setNameHits([]);
+    setShowNameHits(false);
+  }
 
   // Auto-fetch missing photos once per trip when the page renders with a Maps key.
   useEffect(() => {
@@ -33,8 +159,16 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   }, [trip.id, gmapsKey, places]);
 
   async function doAdd() {
-    await api.post(`/trips/${trip.id}/places`, { ...form, leg_id: form.leg_id === "" ? null : form.leg_id });
+    await api.post(`/trips/${trip.id}/places`, {
+      ...form,
+      leg_id: form.leg_id === "" ? null : form.leg_id,
+      lat: picked?.lat ?? null,
+      lng: picked?.lng ?? null,
+      google_place_id: picked?.google_place_id || "",
+      photo_ref: picked?.photo_ref || "",
+    });
     setForm({ ...form, name: "", notes: "" });
+    setPicked(null);
     autoFetchedTrip.current = null; // let the new place pick up a photo
     await refresh();
   }
@@ -72,32 +206,129 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     byLeg.set(k, [...(byLeg.get(k) || []), p]);
   }
   const groups: { label: string; items: Place[] }[] = [
-    ...legs.map((l) => ({ label: `${l.city}${l.country ? `, ${l.country}` : ""}`, items: byLeg.get(l.id) || [] })),
-    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)! }] : []),
-  ];
+    ...legs.map((l) => ({ label: `${l.city}${l.country ? `, ${l.country}` : ""}`, items: (byLeg.get(l.id) || []).filter(matchesFilters) })),
+    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)!.filter(matchesFilters) }] : []),
+  ].filter((g) => !anyFilterActive || g.items.length > 0);
 
   return (
     <div className="pad">
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
       <div className="row spread">
-        <h2>Places ({places.filter((p) => p.status === "active").length} active)</h2>
-        {fetchingPhotos && <span className="hint">📷 Fetching photos…</span>}
+        <h2>
+          Places ({places.filter((p) => p.status === "active").length} active)
+          {anyFilterActive && (
+            <span className="hint"> — showing {places.filter(matchesFilters).length} match{places.filter(matchesFilters).length === 1 ? "" : "es"}</span>
+          )}
+        </h2>
+        <div className="row" style={{ gap: 8 }}>
+          {fetchingPhotos && <span className="hint">📷 Fetching photos…</span>}
+          <button
+            className={`icon-btn${filtersOpen ? " active" : ""}`} title="Filter places"
+            onClick={() => setFiltersOpen((v) => !v)}
+          >
+            <FilterIcon />
+            {anyFilterActive && <span className="badge-dot" />}
+          </button>
+        </div>
       </div>
-      <div className="add-row">
-        <input dir="auto" placeholder="Place name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
-          <option value="">No city</option>
-          {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
-        </select>
-        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-        </select>
-        <input type="number" title="Duration (minutes)" value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} style={{ width: 70 }} />
-        <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-          <option value="must">must</option><option value="want">want</option><option value="maybe">maybe</option>
-        </select>
-        <button className="primary" onClick={addPlace}>Add</button>
-      </div>
+
+      {filtersOpen && (
+        <div className="filter-bar">
+          <div className="filter-search" ref={searchWrapRef}>
+            <input
+              dir="auto" placeholder="🔍 Search places…" value={nameFilter}
+              onChange={(e) => { setNameFilter(e.target.value); setShowSuggestions(true); setHighlightIdx(-1); }}
+              onFocus={() => setShowSuggestions(true)}
+              onKeyDown={(e) => {
+                if (!showSuggestions || suggestions.length === 0) {
+                  if (e.key === "Escape") setShowSuggestions(false);
+                  return;
+                }
+                if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((i) => Math.min(i + 1, suggestions.length - 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((i) => Math.max(i - 1, 0)); }
+                else if (e.key === "Enter" && highlightIdx >= 0) { setNameFilter(suggestions[highlightIdx]); setShowSuggestions(false); }
+                else if (e.key === "Escape") setShowSuggestions(false);
+              }}
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <ul className="autocomplete">
+                {suggestions.map((s, i) => (
+                  <li key={s} className={i === highlightIdx ? "active" : ""} dir="auto"
+                    onClick={() => { setNameFilter(s); setShowSuggestions(false); }}>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="filter-chips">
+            {CATEGORIES.map((c) => (
+              <button key={c} className={`chip-toggle${catFilter.has(c) ? " active" : ""}`} onClick={() => toggleCat(c)}>{c}</button>
+            ))}
+          </div>
+          {legs.length > 0 && (
+            <div className="filter-chips">
+              {legs.map((l) => (
+                <button key={l.id} dir="auto" className={`chip-toggle${cityFilter.has(l.id) ? " active" : ""}`} onClick={() => toggleCity(l.id)}>{l.city}</button>
+              ))}
+              {byLeg.has(null) && (
+                <button className={`chip-toggle${cityFilter.has(null) ? " active" : ""}`} onClick={() => toggleCity(null)}>🌍 Unassigned</button>
+              )}
+            </div>
+          )}
+          {anyFilterActive && <button className="small" onClick={clearFilters}>Clear filters ✕</button>}
+        </div>
+      )}
+
+      <button className="primary" onClick={() => setAddOpen((v) => !v)}>{addOpen ? "− Close" : "+ Add place"}</button>
+
+      {addOpen && (
+        <div className="add-row">
+          <div className="filter-search" ref={addNameWrapRef}>
+            <input
+              dir="auto" placeholder={gmapsKey ? "Search Google Maps (English)…" : "Search OpenStreetMap, or type a name…"}
+              value={form.name}
+              onChange={(e) => { setForm({ ...form, name: e.target.value }); setPicked(null); setShowNameHits(true); }}
+              onFocus={() => nameHits.length > 0 && setShowNameHits(true)}
+              onKeyDown={(e) => {
+                if (!showNameHits || nameHits.length === 0) return;
+                if (e.key === "ArrowDown") { e.preventDefault(); setNameHitIdx((i) => Math.min(i + 1, nameHits.length - 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setNameHitIdx((i) => Math.max(i - 1, 0)); }
+                else if (e.key === "Enter" && nameHitIdx >= 0) { e.preventDefault(); pickNameHit(nameHits[nameHitIdx]); }
+                else if (e.key === "Escape") setShowNameHits(false);
+              }}
+            />
+            {showNameHits && (nameSearching || nameHits.length > 0) && (
+              <ul className="autocomplete">
+                {nameSearching && <li className="hint">Searching…</li>}
+                {!nameSearching && nameHits.map((hit, i) => (
+                  <li key={i} className={i === nameHitIdx ? "active" : ""} onClick={() => pickNameHit(hit)}>
+                    <div dir="auto"><strong>{hit.name}</strong></div>
+                    {hit.address && <div className="hint" dir="auto">{hit.address}</div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {picked && <p className="hint">📍 Location matched — will be pinned on the map too.</p>}
+          </div>
+          <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
+            <option value="">No city</option>
+            {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
+          </select>
+          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          </select>
+          <input type="number" title="Duration (minutes)" value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} style={{ width: 70 }} />
+          <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+            <option value="must">must</option><option value="want">want</option><option value="maybe">maybe</option>
+          </select>
+          <button className="primary" onClick={addPlace}>Add</button>
+        </div>
+      )}
+
+      {anyFilterActive && groups.length === 0 && (
+        <p className="hint">No places match your filters. <button className="small" onClick={clearFilters}>Clear filters</button></p>
+      )}
 
       {groups.map((g) => (
         <div key={g.label}>

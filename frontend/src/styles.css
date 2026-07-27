@@ -267,6 +267,36 @@ a { color: var(--accent-dark); }
 .pcard-controls select, .pcard-controls input { font-size: 12px; padding: 5px 7px; }
 .pcard-actions { margin-top: auto; }
 
+/* ---------- places filter bar (search + category/city toggle chips) ---------- */
+.filter-bar { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 16px; }
+.filter-search { position: relative; max-width: 360px; }
+.filter-search input { width: 100%; }
+.autocomplete {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-lg); list-style: none; margin: 0; padding: 4px;
+  max-height: 220px; overflow-y: auto;
+}
+.autocomplete li { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.autocomplete li:hover, .autocomplete li.active { background: var(--accent-tint); color: var(--accent-dark); }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-toggle {
+  background: var(--card); border: 1px solid var(--border-strong); color: var(--muted);
+  border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 500;
+}
+.chip-toggle:hover:not(:disabled) { border-color: var(--accent); box-shadow: none; }
+.chip-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.icon-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; flex: 0 0 auto;
+}
+.icon-btn.active { border-color: var(--accent); color: var(--accent-dark); background: var(--accent-tint); }
+.icon-btn .badge-dot {
+  position: absolute; top: 5px; right: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--card);
+}
+
 input.subtle, select.subtle { border-color: transparent; background: transparent; padding: 3px 4px; font-size: 12px; color: var(--muted); }
 input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus { border-color: var(--border-strong); background: var(--card); color: var(--text); }
 
