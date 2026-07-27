@@ -248,7 +248,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
       {expenses.length > 0 && <p className="hint">Click a row to expand and edit — fix the amount or currency to match what your card was actually charged.</p>}
       <p className="hint">
         Pay in any currency — pick it next to the amount (local currencies for this trip's countries are suggested first).
-        The summary converts everything to your home currency ({home}), set in Settings → Money.
+        The summary converts everything to your home currency ({home}), set in Profile → Money.
       </p>
     </div>
   );

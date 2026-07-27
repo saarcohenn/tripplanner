@@ -20,7 +20,7 @@ export default function ConfirmPlanDialog({ open, llmReady, onChoose }: {
         </p>
         <div className="modal-actions">
           <button className="primary" onClick={() => onChoose("add_regen")} disabled={!llmReady}
-            title={llmReady ? "" : "Add an LLM key in Settings first"}>
+            title={llmReady ? "" : "Add an LLM key in Profile first"}>
             Add &amp; regenerate now
           </button>
           <button onClick={() => onChoose("add")}>Just add</button>

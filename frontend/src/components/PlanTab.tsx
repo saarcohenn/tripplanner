@@ -37,7 +37,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
           schedule — it never adds new attractions.
         </p>
         <button className="primary" onClick={generatePlan} disabled={!llmReady || busy}>
-          {llmReady ? "Generate plan" : "Add an LLM key in Settings first"}
+          {llmReady ? "Generate plan" : "Add an LLM key in Profile first"}
         </button>
       </div>
     );

@@ -216,11 +216,13 @@ api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
   const b = getBundle(tripId);
   const existing: any = latestJob(tripId);
   if (existing?.status === "running") return void res.status(202).json(existing);
+  const user = req.user;
+  const cfg = loadLlmConfig(user);
 
   const version = (b.trip as any).plan_version;
   const job = startJob(tripId, "plan", async () => {
-    const p = planPrompt(b, getSetting("plan_system_prompt"));
-    const raw = await complete(p.system, p.user, undefined, "plan");
+    const p = planPrompt(b, user.plan_system_prompt);
+    const raw = await complete(p.system, p.user, cfg, "plan", user.id);
     const plan = extractJson(raw);
 
     // The advisor review is a separate, best-effort LLM call. A slow or failing advisor must never
@@ -228,7 +230,7 @@ api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
     let advisorJson: string | null = null;
     try {
       const a = advisorPrompt(b, JSON.stringify(plan));
-      const advRaw = await complete(a.system, a.user, undefined, "advisor");
+      const advRaw = await complete(a.system, a.user, cfg, "advisor", user.id);
       advisorJson = JSON.stringify(extractJson(advRaw));
     } catch (e: any) {
       console.error(`Advisor review failed for trip ${tripId} (plan was still saved):`, e.message || e);
@@ -251,10 +253,12 @@ api.post("/trips/:id/advise", wrap(async (req, res) => {
   if (!plan) throw Object.assign(new Error("Generate a plan first"), { status: 400 });
   const existing: any = latestJob(tripId);
   if (existing?.status === "running") return void res.status(202).json(existing);
+  const user = req.user;
+  const cfg = loadLlmConfig(user);
 
   const job = startJob(tripId, "advisor", async () => {
     const a = advisorPrompt(b, plan.plan_json);
-    const advRaw = await complete(a.system, a.user, undefined, "advisor");
+    const advRaw = await complete(a.system, a.user, cfg, "advisor", user.id);
     const advisor = extractJson(advRaw);
     db.prepare("UPDATE plans SET advisor_json = ? WHERE id = ?").run(JSON.stringify(advisor), plan.id);
     return { planId: plan.id };
@@ -298,7 +302,8 @@ api.post("/import/conversation", wrap(async (req, res) => {
     throw Object.assign(new Error("Paste the full conversation text (got almost nothing)"), { status: 400 });
   }
   const p = importPrompt(text.slice(0, 300_000));
-  const raw = await complete(p.system, p.user, undefined, "import");
+  const cfg = loadLlmConfig(req.user);
+  const raw = await complete(p.system, p.user, cfg, "import", req.user.id);
   const t = extractJson<any>(raw);
 
   const tx = db.transaction(() => {
@@ -526,45 +531,64 @@ api.get("/fx/:base", wrap(async (req, res) => {
   res.json({ base, rates: data.rates });
 }));
 
-// ---------- settings ----------
-const SETTING_KEYS = [
-  "llm_provider", "llm_api_key", "llm_model", "auto_replan", "google_maps_api_key",
-  "llm_price_in", "llm_price_out", "llm_monthly_budget", "home_currency", "plan_system_prompt",
-];
+// ---------- settings (admin-only: global config) ----------
+const SETTING_KEYS = ["google_maps_api_key"];
 
-api.get("/settings", wrap((_req, res) => {
+api.get("/settings", requireAdmin, wrap((_req, res) => {
   const out: Record<string, string | null> = {};
   for (const k of SETTING_KEYS) out[k] = getSetting(k);
-  // Never leak the full key back to the browser.
-  if (out.llm_api_key) out.llm_api_key = `saved:${out.llm_api_key.slice(0, 6)}…${out.llm_api_key.slice(-4)}`;
   const source = out.google_maps_api_key ? "db" : process.env.GOOGLE_MAPS_API_KEY ? "env" : null;
   out.google_maps_api_key = effectiveGmapsKey();
-  res.json({
-    ...out, google_maps_key_source: source, default_models: DEFAULT_MODELS,
-    default_plan_system_prompt: DEFAULT_PLAN_SYSTEM_PROMPT,
-  });
+  res.json({ ...out, google_maps_key_source: source });
 }));
 
-// List chat models available to the given (or saved) key, for the Settings dropdown.
-api.post("/llm/models", wrap(async (req, res) => {
-  const provider = (req.body.provider || getSetting("llm_provider") || "anthropic") as any;
-  let key = String(req.body.api_key || "");
-  if (!key || key.startsWith("saved:")) key = getSetting("llm_api_key") || "";
-  if (!key) throw Object.assign(new Error("Enter an API key first, then load the model list"), { status: 400 });
-  res.json({ models: await listModels(provider, key) });
-}));
-
-api.put("/settings", wrap((req, res) => {
+api.put("/settings", requireAdmin, wrap((req, res) => {
   for (const k of SETTING_KEYS) {
-    if (k in req.body && req.body[k] != null && !(k === "llm_api_key" && String(req.body[k]).startsWith("saved:"))) {
-      setSetting(k, String(req.body[k]));
-    }
+    if (k in req.body && req.body[k] != null) setSetting(k, String(req.body[k]));
   }
   res.json({ ok: true });
 }));
 
-api.post("/settings/test", wrap(async (_req, res) => {
-  const cfg = loadLlmConfig();
+// Any authenticated user needs the effective Google Maps key for the map/places-autocomplete —
+// that's global config, but reading it isn't admin-only the way editing it is.
+api.get("/app-config", wrap((_req, res) => {
+  const key = effectiveGmapsKey();
+  res.json({ google_maps_api_key: key, google_maps_key_source: getSetting("google_maps_api_key") ? "db" : process.env.GOOGLE_MAPS_API_KEY ? "env" : null });
+}));
+
+api.get("/llm/defaults", wrap((_req, res) => {
+  res.json({ default_models: DEFAULT_MODELS, default_plan_system_prompt: DEFAULT_PLAN_SYSTEM_PROMPT });
+}));
+
+// ---------- profile (per-user: LLM connection, budget, plan prompt, money) ----------
+const PROFILE_FIELDS = [
+  "llm_provider", "llm_api_key", "llm_model", "llm_price_in", "llm_price_out",
+  "llm_monthly_budget", "plan_system_prompt", "home_currency", "auto_replan",
+];
+
+api.put("/profile", wrap((req, res) => {
+  const cols = PROFILE_FIELDS.filter((f) =>
+    f in req.body && req.body[f] != null && !(f === "llm_api_key" && String(req.body[f]).startsWith("saved:"))
+  );
+  if (cols.length) {
+    db.prepare(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
+      .run(...cols.map((c) => String(req.body[c])), req.user.id);
+  }
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  res.json({ user: safeUser(user as any) });
+}));
+
+// List chat models available to the given (or saved) key, for the Profile dropdown.
+api.post("/llm/models", wrap(async (req, res) => {
+  const provider = (req.body.provider || req.user.llm_provider || "anthropic") as any;
+  let key = String(req.body.api_key || "");
+  if (!key || key.startsWith("saved:")) key = req.user.llm_api_key || "";
+  if (!key) throw Object.assign(new Error("Enter an API key first, then load the model list"), { status: 400 });
+  res.json({ models: await listModels(provider, key) });
+}));
+
+api.post("/settings/test", wrap(async (req, res) => {
+  const cfg = loadLlmConfig(req.user);
   // For Gemini, validate the key and model name first — its errors are otherwise cryptic.
   if (cfg.provider === "gemini") {
     const r = await fetch(
@@ -588,14 +612,14 @@ api.post("/settings/test", wrap(async (_req, res) => {
       );
     }
   }
-  const reply = await complete("Reply with exactly: OK", "ping", cfg, "test");
+  const reply = await complete("Reply with exactly: OK", "ping", cfg, "test", req.user.id);
   res.json({ ok: true, model: cfg.model, reply: reply.trim().slice(0, 100) });
 }));
 
 // Ask the provider itself about the key's budget/spend. Only OpenRouter exposes this.
-api.get("/llm/provider-plan", wrap(async (_req, res) => {
-  const provider = getSetting("llm_provider") || "anthropic";
-  const key = getSetting("llm_api_key") || "";
+api.get("/llm/provider-plan", wrap(async (req, res) => {
+  const provider = req.user.llm_provider || "anthropic";
+  const key = req.user.llm_api_key || "";
   if (!key) throw Object.assign(new Error("Save an API key first"), { status: 400 });
   if (provider !== "openrouter") {
     throw Object.assign(
@@ -627,24 +651,24 @@ api.get("/llm/provider-plan", wrap(async (_req, res) => {
   });
 }));
 
-// ---------- LLM usage / billing ----------
-api.get("/llm/usage", wrap((_req, res) => {
+// ---------- LLM usage / billing (per user) ----------
+api.get("/llm/usage", wrap((req, res) => {
   const days = db.prepare(
     `SELECT substr(ts, 1, 10) AS day, SUM(input_tokens) AS input_tokens,
             SUM(output_tokens) AS output_tokens, COUNT(*) AS calls
-     FROM llm_usage WHERE ts >= datetime('now', '-30 days')
+     FROM llm_usage WHERE user_id = ? AND ts >= datetime('now', '-30 days')
      GROUP BY day ORDER BY day`
-  ).all();
+  ).all(req.user.id);
   const month = db.prepare(
     `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
             COALESCE(SUM(output_tokens), 0) AS output_tokens, COUNT(*) AS calls
-     FROM llm_usage WHERE ts >= date('now', 'start of month')`
-  ).get();
+     FROM llm_usage WHERE user_id = ? AND ts >= date('now', 'start of month')`
+  ).get(req.user.id);
   const totals = db.prepare(
     `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
             COALESCE(SUM(output_tokens), 0) AS output_tokens, COUNT(*) AS calls
-     FROM llm_usage`
-  ).get();
-  const recent = db.prepare(`SELECT * FROM llm_usage ORDER BY id DESC LIMIT 12`).all();
+     FROM llm_usage WHERE user_id = ?`
+  ).get(req.user.id);
+  const recent = db.prepare(`SELECT * FROM llm_usage WHERE user_id = ? ORDER BY id DESC LIMIT 12`).all(req.user.id);
   res.json({ days, month, totals, recent });
 }));

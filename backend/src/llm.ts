@@ -1,9 +1,15 @@
-import { getSetting, recordLlmUsage } from "./db.js";
+import { recordLlmUsage } from "./db.js";
 
 export type LlmConfig = {
   provider: "anthropic" | "openai" | "gemini" | "openrouter";
   apiKey: string;
   model: string;
+};
+
+export type LlmUser = {
+  llm_provider?: string | null;
+  llm_api_key?: string | null;
+  llm_model?: string | null;
 };
 
 export const DEFAULT_MODELS: Record<LlmConfig["provider"], string> = {
@@ -14,13 +20,13 @@ export const DEFAULT_MODELS: Record<LlmConfig["provider"], string> = {
   openrouter: "anthropic/claude-sonnet-4.5",
 };
 
-export function loadLlmConfig(): LlmConfig {
-  const provider = (getSetting("llm_provider") || "anthropic") as LlmConfig["provider"];
-  const apiKey = getSetting("llm_api_key") || "";
-  const model = getSetting("llm_model") || DEFAULT_MODELS[provider] || DEFAULT_MODELS.anthropic;
+export function loadLlmConfig(user: LlmUser): LlmConfig {
+  const provider = (user.llm_provider || "anthropic") as LlmConfig["provider"];
+  const apiKey = user.llm_api_key || "";
+  const model = user.llm_model || DEFAULT_MODELS[provider] || DEFAULT_MODELS.anthropic;
   if (!apiKey) {
     const err: any = new Error(
-      "No LLM API key configured. Open Settings and add your provider + API key."
+      "No LLM API key configured. Open your Profile and add your provider + API key."
     );
     err.status = 400;
     throw err;
@@ -32,13 +38,13 @@ export function loadLlmConfig(): LlmConfig {
 export async function complete(
   system: string,
   user: string,
-  cfg?: LlmConfig,
-  purpose = "other"
+  cfg: LlmConfig,
+  purpose: string,
+  userId: number
 ): Promise<string> {
-  const c = cfg || loadLlmConfig();
-  const r = await completeRaw(c, system, user);
+  const r = await completeRaw(cfg, system, user);
   try {
-    recordLlmUsage(c.provider, c.model, purpose, r.input, r.output);
+    recordLlmUsage(userId, cfg.provider, cfg.model, purpose, r.input, r.output);
   } catch {
     /* usage tracking must never break the actual call */
   }

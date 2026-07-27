@@ -168,6 +168,35 @@ addColumn("places", "photo_ref TEXT DEFAULT ''");
 addColumn("places", "source TEXT DEFAULT 'user'");
 addColumn("todos", "source TEXT DEFAULT 'user'");
 addColumn("bookings", "source TEXT DEFAULT 'user'");
+addColumn("users", "llm_provider TEXT");
+addColumn("users", "llm_api_key TEXT");
+addColumn("users", "llm_model TEXT");
+addColumn("users", "llm_price_in TEXT");
+addColumn("users", "llm_price_out TEXT");
+addColumn("users", "llm_monthly_budget TEXT");
+addColumn("users", "plan_system_prompt TEXT");
+addColumn("users", "home_currency TEXT DEFAULT 'USD'");
+addColumn("users", "auto_replan TEXT DEFAULT '0'");
+addColumn("llm_usage", "user_id INTEGER REFERENCES users(id)");
+
+// One-time migration: the LLM connection, budget and plan-prompt settings used to live in the
+// global `settings` table (single-tenant era) — now they're per-user (Profile page). Copy the old
+// global values onto whichever admin account(s) already exist, and attribute pre-existing usage
+// history to the first one, so upgrading an existing install doesn't lose that configuration.
+if (getSetting("llm_api_key") !== null && getSetting("migrated_user_settings") !== "1") {
+  const fields = [
+    "llm_provider", "llm_api_key", "llm_model", "llm_price_in", "llm_price_out",
+    "llm_monthly_budget", "plan_system_prompt", "home_currency", "auto_replan",
+  ];
+  const values = fields.map((f) => getSetting(f));
+  const admins = db.prepare("SELECT id FROM users WHERE role = 'admin'").all() as { id: number }[];
+  const update = db.prepare(`UPDATE users SET ${fields.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`);
+  for (const a of admins) update.run(...values, a.id);
+  if (admins.length) {
+    db.prepare("UPDATE llm_usage SET user_id = ? WHERE user_id IS NULL").run(admins[0].id);
+  }
+  setSetting("migrated_user_settings", "1");
+}
 
 export function bumpPlanVersion(tripId: number) {
   db.prepare(
@@ -189,6 +218,7 @@ export function setSetting(key: string, value: string) {
 }
 
 export function recordLlmUsage(
+  userId: number,
   provider: string,
   model: string,
   purpose: string,
@@ -196,8 +226,8 @@ export function recordLlmUsage(
   outputTokens: number
 ) {
   db.prepare(
-    `INSERT INTO llm_usage (provider, model, purpose, input_tokens, output_tokens) VALUES (?,?,?,?,?)`
-  ).run(provider, model, purpose, Math.round(inputTokens || 0), Math.round(outputTokens || 0));
+    `INSERT INTO llm_usage (user_id, provider, model, purpose, input_tokens, output_tokens) VALUES (?,?,?,?,?,?)`
+  ).run(userId, provider, model, purpose, Math.round(inputTokens || 0), Math.round(outputTokens || 0));
 }
 
 export function seedDemoIfEmpty() {

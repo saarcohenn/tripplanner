@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { PlanJob, Settings, Trip, TripDetail, User } from "./types";
+import type { AppConfig, PlanJob, Trip, TripDetail, User } from "./types";
 import OverviewTab from "./components/OverviewTab";
 import MapTab from "./components/MapTab";
 import PlacesTab from "./components/PlacesTab";
@@ -10,14 +10,14 @@ import BookingsTab from "./components/BookingsTab";
 import ExpensesTab from "./components/ExpensesTab";
 import ImportTab from "./components/ImportTab";
 import SettingsTab from "./components/SettingsTab";
+import ProfileTab from "./components/ProfileTab";
 import SetupAdminForm from "./components/SetupAdminForm";
 import AuthGate from "./components/AuthGate";
 
-const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Settings"] as const;
+const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Profile", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 /** Pages scoped to the selected trip vs. app-wide pages (drawer groups them separately). */
 const TRIP_TABS: Tab[] = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses"];
-const APP_TABS: Tab[] = ["Import", "Settings"];
 
 export default function App() {
   const [authState, setAuthState] = useState<"checking" | "needsSetup" | "loggedOut" | "ready">("checking");
@@ -43,6 +43,12 @@ export default function App() {
     setAuthState("loggedOut");
   }
 
+  // App-wide (not trip-scoped) pages, drawer-grouped separately from TRIP_TABS. Settings is
+  // admin-only global config; everyone else manages their own LLM key/budget/prompt in Profile.
+  const APP_TABS: Tab[] = currentUser?.role === "admin"
+    ? ["Import", "Profile", "Settings"]
+    : ["Import", "Profile"];
+
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<TripDetail | null>(null);
@@ -52,7 +58,11 @@ export default function App() {
     return (TABS as readonly string[]).includes(h) ? (h as Tab) : "Overview";
   });
   useEffect(() => { window.history.replaceState(null, "", `#${tab}`); }, [tab]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  // A deep link (or a stale hash from before a demotion) could point at a tab this user can't see.
+  useEffect(() => {
+    if (tab === "Settings" && currentUser?.role !== "admin") setTab("Overview");
+  }, [tab, currentUser]);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [planJob, setPlanJob] = useState<PlanJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -72,13 +82,13 @@ export default function App() {
     setDetail(await api.get<TripDetail>(`/trips/${selectedId}`));
   }, [selectedId]);
 
-  const loadSettings = useCallback(async () => {
-    setSettings(await api.get<Settings>("/settings"));
+  const loadAppConfig = useCallback(async () => {
+    setAppConfig(await api.get<AppConfig>("/app-config"));
   }, []);
 
   useEffect(() => { if (authState === "ready") loadTrips().catch((e) => setError(String(e.message))); }, [loadTrips, authState]);
   useEffect(() => { if (authState === "ready") loadDetail().catch((e) => setError(String(e.message))); }, [loadDetail, authState]);
-  useEffect(() => { if (authState === "ready") loadSettings().catch(() => {}); }, [loadSettings, authState]);
+  useEffect(() => { if (authState === "ready") loadAppConfig().catch(() => {}); }, [loadAppConfig, authState]);
 
   /** Call after any mutation: refresh data; the plan-watcher effect below reacts to version drift. */
   const refresh = useCallback(async () => {
@@ -89,8 +99,8 @@ export default function App() {
   // collecting legs/places (no plan yet) the first generation is started from the Plan tab.
   const planOutdated =
     !!detail && detail.plan != null && detail.plan.plan_version < detail.trip.plan_version;
-  const llmReady = !!settings?.llm_api_key;
-  const autoReplan = settings?.auto_replan === "1";
+  const llmReady = !!currentUser?.llm_api_key;
+  const autoReplan = currentUser?.auto_replan === "1";
 
   // Plan/advisor generation runs as a background job on the server (LLM calls can take minutes on
   // slow/high-end models) — this just kicks it off; the SSE subscription below reports back.
@@ -198,7 +208,7 @@ export default function App() {
           ))}
         </ul>
         <div className="sidebar-footer">
-          {!llmReady && <p className="hint">⚠ No LLM key set — plan generation disabled. Add one in Settings.</p>}
+          {!llmReady && <p className="hint">⚠ No LLM key set — plan generation disabled. Add one in Profile.</p>}
           <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email} <button className="inline" onClick={logout}>Log out</button></p>
         </div>
       </aside>
@@ -243,7 +253,7 @@ export default function App() {
 
       <main className="main">
         <nav className="tabs">
-          {TABS.map((t) => (
+          {[...TRIP_TABS, ...APP_TABS].map((t) => (
             <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>{t}</button>
           ))}
         </nav>
@@ -257,24 +267,26 @@ export default function App() {
               ? autoReplan
                 ? " Auto re-planning shortly…"
                 : <button className="inline" onClick={generatePlan}>Regenerate now</button>
-              : " Add an LLM key in Settings to generate it."}
+              : " Add an LLM key in Profile to generate it."}
           </div>
         )}
 
         {tab === "Import" ? (
           <ImportTab onImported={async (tripId) => { await loadTrips(); setSelectedId(tripId); setTab("Overview"); }} />
+        ) : tab === "Profile" ? (
+          <ProfileTab currentUser={currentUser!} onUserUpdate={setCurrentUser} logout={logout} />
         ) : tab === "Settings" ? (
-          <SettingsTab settings={settings} reload={loadSettings} currentUser={currentUser} />
+          <SettingsTab currentUser={currentUser!} />
         ) : !detail ? (
           <p className="hint pad">Select or create a trip.</p>
         ) : tab === "Overview" ? (
           // key: remount per trip so form state seeded from the trip doesn't survive a trip switch
           <OverviewTab key={detail.trip.id} detail={detail} refresh={refresh} />
         ) : tab === "Map" ? (
-          <MapTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null}
+          <MapTab detail={detail} refresh={refresh} gmapsKey={appConfig?.google_maps_api_key || null}
             llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Places" ? (
-          <PlacesTab detail={detail} refresh={refresh} gmapsKey={settings?.google_maps_api_key || null}
+          <PlacesTab detail={detail} refresh={refresh} gmapsKey={appConfig?.google_maps_api_key || null}
             llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Plan" ? (
           <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan}
@@ -282,9 +294,9 @@ export default function App() {
         ) : tab === "Todos" ? (
           <TodosTab detail={detail} refresh={refresh} />
         ) : tab === "Expenses" ? (
-          <ExpensesTab key={detail.trip.id} detail={detail} refresh={refresh} homeCurrency={settings?.home_currency || null} />
+          <ExpensesTab key={detail.trip.id} detail={detail} refresh={refresh} homeCurrency={currentUser?.home_currency || null} />
         ) : (
-          <BookingsTab key={detail.trip.id} detail={detail} refresh={refresh} homeCurrency={settings?.home_currency || null} />
+          <BookingsTab key={detail.trip.id} detail={detail} refresh={refresh} homeCurrency={currentUser?.home_currency || null} />
         )}
       </main>
     </div>

@@ -5,6 +5,20 @@ export type User = {
   role: "admin" | "user";
   status: "pending" | "approved" | "rejected";
   created_at: string;
+  llm_provider: string | null;
+  llm_api_key: string | null;
+  llm_model: string | null;
+  llm_price_in: string | null;
+  llm_price_out: string | null;
+  llm_monthly_budget: string | null;
+  plan_system_prompt: string | null;
+  home_currency: string | null;
+  auto_replan: string | null;
+};
+
+export type LlmDefaults = {
+  default_models: Record<string, string>;
+  default_plan_system_prompt: string;
 };
 
 export type Trip = {
@@ -146,20 +160,16 @@ export type TripDetail = {
   plan: PlanRow | null;
 };
 
+/** Global admin-only config (Settings tab). Per-user LLM/budget/prompt live on User (Profile tab). */
 export type Settings = {
-  llm_provider: string | null;
-  llm_api_key: string | null;
-  llm_model: string | null;
-  auto_replan: string | null;
   google_maps_api_key: string | null;
   google_maps_key_source: "db" | "env" | null;
-  llm_price_in: string | null;
-  llm_price_out: string | null;
-  llm_monthly_budget: string | null;
-  home_currency: string | null;
-  plan_system_prompt: string | null;
-  default_plan_system_prompt: string;
-  default_models: Record<string, string>;
+};
+
+/** Same shape, available to every authenticated user (not just admins) via GET /app-config. */
+export type AppConfig = {
+  google_maps_api_key: string | null;
+  google_maps_key_source: "db" | "env" | null;
 };
 
 export type PlanJob = {
