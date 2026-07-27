@@ -139,9 +139,9 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
   const selected = placesWithCoords.find((p) => p.id === selectedId) || null;
 
   return (
-    <div className="map-layout">
+    <div className="pad map-page">
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
-      <div className="map-side">
+      <div className="map-controls">
         <div className="search-row">
           <input
             dir="auto"
@@ -187,7 +187,7 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
             Google Cloud project, or billing/referrer restrictions block it.
           </div>
         )}
-        <p className="hint">Click anywhere on the map to pin a new place. Changes mark the daily plan as outdated.</p>
+        <p className="hint hint-center">Click anywhere on the map to pin a new place. Changes mark the daily plan as outdated.</p>
         <ul className="legend">
           {Object.entries(CATEGORY_COLORS).map(([k, c]) => (
             <li key={k}><span className="dot" style={{ background: c }} /> {k}</li>
@@ -195,6 +195,7 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
         </ul>
       </div>
 
+      <div className="map-frame">
       {useGoogle ? (
         <APIProvider apiKey={gmapsKey!} language="en">
           <GMap
@@ -266,6 +267,7 @@ export default function MapTab({ detail, refresh, gmapsKey, llmReady, generatePl
           )}
         </MapContainer>
       )}
+      </div>
     </div>
   );
 }

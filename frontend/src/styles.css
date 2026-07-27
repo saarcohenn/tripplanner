@@ -203,17 +203,16 @@ a { color: var(--accent-dark); }
 .todo input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 
 /* ---------- map ---------- */
-/* Framed as one rounded card (like every other panel in the app) instead of sitting
-   edge-to-edge against the sidebar and tab bar. */
-.map-layout {
-  display: flex; flex: 1; min-height: 0;
-  margin: 14px 22px 22px;
+/* Controls on top (search, results, legend — all centered in a narrow column), the map
+   itself framed as its own centered, rounded, shadowed card below. */
+.map-page { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
+.map-controls { width: 100%; max-width: 640px; margin: 0 auto; text-align: center; }
+.map-controls .search-row, .map-controls .result, .map-controls .pending-card { text-align: left; }
+.map-frame {
+  flex: 1; min-height: 360px; width: 100%; max-width: 960px; margin: 0 auto;
+  display: flex;
   border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow-lg); overflow: hidden;
-}
-.map-side {
-  width: 310px; min-width: 310px; padding: 14px; overflow-y: auto;
-  background: var(--bg); border-right: 1px solid var(--border);
 }
 .map { flex: 1; min-height: 0; }
 .search-row { display: flex; gap: 6px; }
@@ -226,8 +225,12 @@ a { color: var(--accent-dark); }
   margin-top: 10px; background: var(--card); border: 1px solid var(--accent);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 8px;
 }
-.legend { list-style: none; padding: 0; margin: 14px 0; font-size: 12px; color: var(--muted); }
-.legend li { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+.hint-center { text-align: center; }
+.legend {
+  list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px;
+}
+.legend li { display: flex; align-items: center; gap: 7px; margin: 0; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .place-card { max-width: 220px; }
 .place-photo { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
@@ -511,12 +514,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   .pad { padding: 10px 12px calc(28px + env(safe-area-inset-bottom)); }
   .banner { margin: 6px 12px 0; padding: 7px 12px; font-size: 12px; border-radius: 8px; }
 
-  /* Stack the split layouts */
-  .map-layout { flex-direction: column; margin: 8px 10px calc(16px + env(safe-area-inset-bottom)); border-radius: 12px; }
-  .map-side {
-    width: 100%; min-width: 0; max-height: 45%;
-    border-right: none; border-bottom: 1px solid var(--border);
-  }
+  .map-frame { border-radius: 12px; margin-bottom: calc(6px + env(safe-area-inset-bottom)); }
   .map { min-height: 320px; }
   .plan-layout { flex-direction: column; overflow-y: auto; }
   .plan-days { overflow: visible; padding: 10px 12px; }
