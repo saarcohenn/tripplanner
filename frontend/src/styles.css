@@ -48,6 +48,16 @@ body {
 .trip-name:hover { background: var(--card-tint); }
 .trip-list li.active .trip-name:hover { background: transparent; }
 .sidebar-footer { font-size: 12px; }
+.sidebar-app-nav {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.sidebar-app-nav button {
+  text-align: left; background: none; border: none; color: var(--muted);
+  padding: 6px 8px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.sidebar-app-nav button:hover { background: var(--card-tint); color: var(--text); }
+.sidebar-app-nav button.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
 
 .stage-dot {
   display: inline-block; width: 9px; height: 9px; border-radius: 50%;
@@ -64,14 +74,6 @@ body {
 }
 .tab:hover { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(232, 128, 5, 0.35); }
-
-/* Desktop equivalent of .drawer-app's bottom-pin: pushes account-level tabs (Import/Rooms/Profile/
-   Settings) to the far edge of the row, separated by a rule, instead of interleaving them with the
-   trip-scoped tabs. */
-.tabs-account {
-  display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto;
-  padding-left: 12px; border-left: 1px solid var(--border);
-}
 
 .main > div:not(.banner), .pad { overflow-y: auto; }
 .pad { padding: 14px 22px 28px; }
