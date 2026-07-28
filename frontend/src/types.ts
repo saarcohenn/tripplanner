@@ -32,7 +32,7 @@ export type RoomMember = {
   id: number;
   email: string;
   display_name: string;
-  role: "owner" | "member";
+  role: "owner" | "editor" | "viewer";
 };
 
 export type Trip = {
@@ -48,8 +48,19 @@ export type Trip = {
   plan_version: number;
   stage: "collect" | "planned";
   room_id: number | null;
+  room_name: string | null;
+  room_owner_id: number | null;
+  room_owner_name: string | null;
+  room_member_count: number;
   created_at: string;
   updated_at: string;
+};
+
+export type Notification = {
+  id: number;
+  message: string;
+  created_at: string;
+  read_at: string | null;
 };
 
 export type Leg = {

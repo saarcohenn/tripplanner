@@ -15,6 +15,8 @@
   --olive-bright: #8aa016;
   --danger: #e8412f;
   --warn: #e86431;
+  --shared: #6b5b95;
+  --shared-tint: #efe9f6;
   --shadow: 0 1px 2px rgba(90, 25, 3, 0.06), 0 4px 14px rgba(90, 25, 3, 0.07);
   --shadow-lg: 0 4px 10px rgba(90, 25, 3, 0.1), 0 16px 40px rgba(90, 25, 3, 0.14);
 }
@@ -31,11 +33,35 @@ body {
 
 /* ---------- sidebar ---------- */
 .sidebar {
+  position: relative;
   width: 240px; min-width: 240px;
   background: var(--card);
   border-right: 1px solid var(--border);
   padding: 18px 14px; display: flex; flex-direction: column; gap: 12px;
 }
+.notif-wrap { position: absolute; top: 14px; right: 14px; }
+.notif-bell {
+  position: relative;
+  background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted);
+  padding: 4px 7px; border-radius: 8px; line-height: 1;
+}
+.notif-bell:hover { background: var(--card-tint); color: var(--text); }
+.notif-badge {
+  position: absolute; top: -3px; right: -1px; background: var(--danger); color: #fff;
+  font-size: 9px; font-weight: 700; border-radius: 999px; min-width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center; padding: 0 3px;
+}
+.notif-panel {
+  /* Opens rightward from the bell (not leftward off-screen) — the sidebar itself is
+     only 240px wide, narrower than the panel. */
+  position: absolute; top: 34px; left: 0; width: min(300px, calc(100vw - 24px));
+  max-height: 340px; overflow-y: auto; background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow-lg); z-index: 30; padding: 4px 0;
+}
+.notif-panel-head { font-weight: 600; font-size: 13px; padding: 8px 12px 4px; }
+.notif-list { list-style: none; margin: 0; padding: 0; }
+.notif-list li { padding: 8px 12px; border-top: 1px dashed var(--border); font-size: 13px; }
+.notif-list li.unread { background: var(--accent-tint); }
 .sidebar h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.3px; }
 .trip-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 .trip-list li { display: flex; align-items: center; gap: 4px; border-radius: 10px; padding: 2px; margin: 2px 0; }
@@ -44,9 +70,15 @@ body {
 .trip-name {
   flex: 1; text-align: left; background: none; border: none; color: var(--text);
   padding: 9px 10px; cursor: pointer; border-radius: 8px; font-size: 13px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
 }
 .trip-name:hover { background: var(--card-tint); }
 .trip-list li.active .trip-name:hover { background: transparent; }
+.trip-name-row { display: flex; align-items: center; }
+.trip-shared-badge {
+  font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  background: var(--shared-tint); color: var(--shared); margin-left: 17px;
+}
 .sidebar-footer { font-size: 12px; }
 .sidebar-app-nav {
   display: flex; flex-direction: column; gap: 2px;
@@ -499,6 +531,10 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
     border-right: none; border-bottom: 1px solid var(--border);
   }
   .sidebar h1, .sidebar > button.primary, .trip-list, .sidebar-footer { display: none; }
+  /* On mobile the bell rides in the hamburger/crumb row instead of floating over it. */
+  .notif-wrap { position: relative; top: auto; right: auto; }
+  /* On mobile the wrap sits at the row's right edge, so the panel must open leftward instead. */
+  .notif-panel { left: auto; right: -8px; }
   .hamburger {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 6px 10px; font-size: 16px; line-height: 1; border-radius: 9px;

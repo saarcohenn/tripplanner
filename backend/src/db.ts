@@ -155,11 +155,20 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS room_members (
   room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'member',  -- owner | member
+  role TEXT NOT NULL DEFAULT 'editor',  -- owner | editor | viewer
   added_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (room_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 `);
 
 // A job still marked "running" from before this process started can never finish — its in-memory
@@ -195,6 +204,11 @@ addColumn("users", "home_currency TEXT DEFAULT 'USD'");
 addColumn("users", "auto_replan TEXT DEFAULT '0'");
 addColumn("llm_usage", "user_id INTEGER REFERENCES users(id)");
 addColumn("trips", "room_id INTEGER REFERENCES rooms(id)");
+
+// Rooms used to have only 'owner'/'member' roles; 'member' is now split into 'editor'/'viewer'.
+// Existing non-owner members keep the edit rights they already had rather than being silently
+// downgraded to read-only.
+db.prepare("UPDATE room_members SET role = 'editor' WHERE role = 'member'").run();
 
 // Safety-net migration (idempotent, runs every boot): every approved user should have a personal
 // room. New users normally get one the moment they're approved (see ensurePersonalRoom in

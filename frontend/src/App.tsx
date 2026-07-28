@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { AppConfig, PlanJob, Trip, TripDetail, User } from "./types";
+import type { AppConfig, Notification, PlanJob, Trip, TripDetail, User } from "./types";
 import OverviewTab from "./components/OverviewTab";
 import MapTab from "./components/MapTab";
 import PlacesTab from "./components/PlacesTab";
@@ -67,6 +67,10 @@ export default function App() {
   const [planJob, setPlanJob] = useState<PlanJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
   const replanTimer = useRef<number | null>(null);
   // Dedupes SSE deliveries (initial-state-on-connect + reconnects) so a dismissed error/refresh
   // doesn't fire again for the same job.
@@ -87,9 +91,47 @@ export default function App() {
     setAppConfig(await api.get<AppConfig>("/app-config"));
   }, []);
 
+  const loadNotifications = useCallback(async () => {
+    const r = await api.get<{ items: Notification[]; unread: number }>("/notifications");
+    setNotifications(r.items);
+    setUnreadCount(r.unread);
+  }, []);
+
   useEffect(() => { if (authState === "ready") loadTrips().catch((e) => setError(String(e.message))); }, [loadTrips, authState]);
   useEffect(() => { if (authState === "ready") loadDetail().catch((e) => setError(String(e.message))); }, [loadDetail, authState]);
   useEffect(() => { if (authState === "ready") loadAppConfig().catch(() => {}); }, [loadAppConfig, authState]);
+  // Polled rather than pushed — invites are infrequent, not worth an SSE channel just for this.
+  useEffect(() => {
+    if (authState !== "ready") return;
+    loadNotifications().catch(() => {});
+    const id = window.setInterval(() => { loadNotifications().catch(() => {}); }, 60000);
+    return () => window.clearInterval(id);
+  }, [authState, loadNotifications]);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
+  async function toggleNotifications() {
+    const opening = !notifOpen;
+    setNotifOpen(opening);
+    if (opening && unreadCount > 0) {
+      await api.post("/notifications/read-all");
+      setUnreadCount(0);
+    }
+  }
+
+  /** A trip shared beyond the owner's own personal room gets a badge in the trip list. */
+  function sharedLabel(t: Trip): string | null {
+    if (t.room_member_count <= 1) return null;
+    return t.room_owner_id !== currentUser?.id
+      ? `shared by ${t.room_owner_name || "someone"}`
+      : `via ${t.room_name}`;
+  }
 
   /** Call after any mutation: refresh data; the plan-watcher effect below reacts to version drift. */
   const refresh = useCallback(async () => {
@@ -192,17 +234,43 @@ export default function App() {
             ? <>{detail.trip.name} <span className="crumb-sep">›</span> {tab}</>
             : tab}
         </div>
+        <div className="notif-wrap" ref={notifRef}>
+          <button className="notif-bell" aria-label="Notifications" onClick={toggleNotifications}>
+            🔔
+            {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
+          </button>
+          {notifOpen && (
+            <div className="notif-panel">
+              <div className="notif-panel-head">Notifications</div>
+              {notifications.length === 0 ? (
+                <p className="hint" style={{ padding: "4px 12px 10px" }}>No notifications yet.</p>
+              ) : (
+                <ul className="notif-list">
+                  {notifications.map((n) => (
+                    <li key={n.id} className={n.read_at ? "" : "unread"}>
+                      <div dir="auto">{n.message}</div>
+                      <div className="hint">{new Date(n.created_at).toLocaleString()}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
         <h1>🧭 TripPlanner</h1>
         <button className="primary" onClick={createTrip}>+ New trip</button>
         <ul className="trip-list">
           {trips.map((t) => (
             <li key={t.id} className={t.id === selectedId ? "active" : ""}>
               <button className="trip-name" onClick={() => setSelectedId(t.id)} dir="auto">
-                <span
-                  className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
-                  title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
-                />
-                {t.name}
+                <span className="trip-name-row">
+                  <span
+                    className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
+                    title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
+                  />
+                  {t.name}
+                </span>
+                {sharedLabel(t) && <span className="trip-shared-badge">{sharedLabel(t)}</span>}
               </button>
               <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
             </li>
@@ -236,11 +304,14 @@ export default function App() {
               <div className="drawer-trip" key={t.id}>
                 <button className={t.id === selectedId ? "drawer-item active" : "drawer-item"} dir="auto"
                   onClick={() => { setSelectedId(t.id); setMenuOpen(false); }}>
-                  <span
-                    className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
-                    title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
-                  />
-                  {t.name}
+                  <span className="trip-name-row">
+                    <span
+                      className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
+                      title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
+                    />
+                    {t.name}
+                  </span>
+                  {sharedLabel(t) && <span className="trip-shared-badge">{sharedLabel(t)}</span>}
                 </button>
                 <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
               </div>

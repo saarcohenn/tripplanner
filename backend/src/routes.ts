@@ -6,7 +6,7 @@ import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR 
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
 import { planPrompt, advisorPrompt, importPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
-import { assertTripAccess, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
+import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
 
 export const api = Router();
 api.use(requireUser);
@@ -130,13 +130,55 @@ api.get("/rooms/:id/members", wrap((req, res) => {
 
 api.post("/rooms/:id/invite", wrap((req, res) => {
   const roomId = Number(req.params.id);
-  assertRoomMember(req.user.id, roomId);
-  const email = String(req.body.email || "").toLowerCase().trim();
-  const target = db.prepare("SELECT id FROM users WHERE email = ? AND status = 'approved'").get(email) as { id: number } | undefined;
-  if (!target) throw Object.assign(new Error("No approved user with that email"), { status: 404 });
+  const me = assertRoomMember(req.user.id, roomId);
+  if (me.role !== "owner") throw Object.assign(new Error("Only the room owner can invite members"), { status: 403 });
+  const role = req.body.role === "viewer" ? "viewer" : "editor";
+  let target: { id: number } | undefined;
+  if (req.body.user_id) {
+    target = db.prepare("SELECT id FROM users WHERE id = ? AND status = 'approved'").get(Number(req.body.user_id)) as any;
+  } else {
+    // Accept either an email or a display name (username) — whichever the invite box was typed with.
+    const identifier = String(req.body.identifier ?? req.body.email ?? "").trim();
+    if (!identifier) throw Object.assign(new Error("Enter an email or username"), { status: 400 });
+    target = db.prepare(
+      `SELECT id FROM users WHERE status = 'approved' AND (LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?))`
+    ).get(identifier, identifier) as any;
+  }
+  if (!target) throw Object.assign(new Error("No approved user found with that email or username"), { status: 404 });
   const already = db.prepare("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?").get(roomId, target.id);
   if (already) throw Object.assign(new Error("Already a member of this room"), { status: 409 });
-  db.prepare("INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, 'member')").run(roomId, target.id);
+  db.prepare("INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)").run(roomId, target.id, role);
+  const room = db.prepare("SELECT name FROM rooms WHERE id = ?").get(roomId) as { name: string };
+  const inviter = req.user.display_name || req.user.email;
+  db.prepare("INSERT INTO notifications (user_id, message) VALUES (?, ?)").run(
+    target.id, `${inviter} added you to "${room.name}" as ${role === "viewer" ? "a viewer" : "an editor"}.`
+  );
+  res.json({ ok: true });
+}));
+
+// ---------- in-app notifications ----------
+api.get("/notifications", wrap((req, res) => {
+  const items = db.prepare(
+    "SELECT id, message, created_at, read_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 20"
+  ).all(req.user.id);
+  const unread = (db.prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL").get(req.user.id) as { c: number }).c;
+  res.json({ items, unread });
+}));
+
+api.post("/notifications/read-all", wrap((req, res) => {
+  db.prepare("UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND read_at IS NULL").run(req.user.id);
+  res.json({ ok: true });
+}));
+
+api.put("/rooms/:id/members/:userId/role", wrap((req, res) => {
+  const roomId = Number(req.params.id);
+  const targetId = Number(req.params.userId);
+  const me = assertRoomMember(req.user.id, roomId);
+  if (me.role !== "owner") throw Object.assign(new Error("Only the room owner can change roles"), { status: 403 });
+  const room = db.prepare("SELECT owner_id FROM rooms WHERE id = ?").get(roomId) as { owner_id: number };
+  if (targetId === room.owner_id) throw Object.assign(new Error("Can't change the owner's role"), { status: 400 });
+  const role = req.body.role === "viewer" ? "viewer" : "editor";
+  db.prepare("UPDATE room_members SET role = ? WHERE room_id = ? AND user_id = ?").run(role, roomId, targetId);
   res.json({ ok: true });
 }));
 
@@ -179,7 +221,14 @@ api.get("/trips", wrap((req, res) => {
   if (rooms.length === 0) return res.json([]);
   seedDemoIfEmpty(rooms[0]);
   const placeholders = rooms.map(() => "?").join(",");
-  res.json(db.prepare(`SELECT * FROM trips WHERE room_id IN (${placeholders}) ORDER BY created_at DESC`).all(...rooms));
+  res.json(db.prepare(
+    `SELECT t.*, r.name AS room_name, r.owner_id AS room_owner_id, ou.display_name AS room_owner_name,
+       (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS room_member_count
+     FROM trips t
+     JOIN rooms r ON r.id = t.room_id
+     LEFT JOIN users ou ON ou.id = r.owner_id
+     WHERE t.room_id IN (${placeholders}) ORDER BY t.created_at DESC`
+  ).all(...rooms));
 }));
 
 api.post("/trips", wrap((req, res) => {
@@ -204,7 +253,7 @@ api.get("/trips/:id", wrap((req, res) => {
 
 api.put("/trips/:id", wrap((req, res) => {
   const id = Number(req.params.id);
-  assertTripAccess(req.user.id, id);
+  assertTripWrite(req.user.id, id);
   const fields = ["name", "trip_type", "start_date", "end_date", "home_city", "budget", "currency", "notes", "stage"];
   const sets = fields.filter((f) => f in req.body);
   if (sets.length) {
@@ -216,9 +265,24 @@ api.put("/trips/:id", wrap((req, res) => {
 }));
 
 api.delete("/trips/:id", wrap((req, res) => {
-  assertTripAccess(req.user.id, Number(req.params.id));
+  assertTripWrite(req.user.id, Number(req.params.id));
   db.prepare("DELETE FROM trips WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+}));
+
+// Moves a trip into a different room the caller can edit in — this is how a trip actually gets
+// shared: create/import it normally (lands in your personal room), then move it into a shared room.
+api.put("/trips/:id/room", wrap((req, res) => {
+  const id = Number(req.params.id);
+  assertTripWrite(req.user.id, id);
+  const targetRoomId = Number(req.body.room_id);
+  if (!targetRoomId) throw Object.assign(new Error("room_id is required"), { status: 400 });
+  const role = db.prepare("SELECT role FROM room_members WHERE room_id = ? AND user_id = ?").get(targetRoomId, req.user.id) as
+    | { role: string }
+    | undefined;
+  if (!role || role.role === "viewer") throw Object.assign(new Error("You need edit access in the destination room"), { status: 403 });
+  db.prepare("UPDATE trips SET room_id = ? WHERE id = ?").run(targetRoomId, id);
+  res.json(db.prepare("SELECT * FROM trips WHERE id = ?").get(id));
 }));
 
 // ---------- generic child-collection CRUD (legs, places, todos, bookings) ----------
@@ -234,7 +298,7 @@ const children: Record<string, ChildSpec> = {
 for (const [name, spec] of Object.entries(children)) {
   api.post(`/trips/:tripId/${name}`, wrap((req, res) => {
     const tripId = Number(req.params.tripId);
-    assertTripAccess(req.user.id, tripId);
+    assertTripWrite(req.user.id, tripId);
     const cols = spec.fields.filter((f) => f in req.body);
     const r = db.prepare(
       `INSERT INTO ${spec.table} (trip_id${cols.map((c) => `, ${c}`).join("")}) VALUES (?${", ?".repeat(cols.length)})`
@@ -247,7 +311,7 @@ for (const [name, spec] of Object.entries(children)) {
     const id = Number(req.params.id);
     const row: any = db.prepare(`SELECT * FROM ${spec.table} WHERE id = ?`).get(id);
     if (!row) throw Object.assign(new Error("not found"), { status: 404 });
-    assertTripAccess(req.user.id, row.trip_id);
+    assertTripWrite(req.user.id, row.trip_id);
     const cols = spec.fields.filter((f) => f in req.body);
     if (cols.length) {
       db.prepare(`UPDATE ${spec.table} SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
@@ -260,7 +324,7 @@ for (const [name, spec] of Object.entries(children)) {
   api.delete(`/${name}/:id`, wrap((req, res) => {
     const row: any = db.prepare(`SELECT * FROM ${spec.table} WHERE id = ?`).get(Number(req.params.id));
     if (row) {
-      assertTripAccess(req.user.id, row.trip_id);
+      assertTripWrite(req.user.id, row.trip_id);
       db.prepare(`DELETE FROM ${spec.table} WHERE id = ?`).run(row.id);
       if (spec.affectsPlan) bumpPlanVersion(row.trip_id);
     }
@@ -304,7 +368,7 @@ function startJob(tripId: number, kind: "plan" | "advisor", work: () => Promise<
 
 api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
   const tripId = Number(req.params.id);
-  assertTripAccess(req.user.id, tripId);
+  assertTripWrite(req.user.id, tripId);
   const b = getBundle(tripId);
   const existing: any = latestJob(tripId);
   if (existing?.status === "running") return void res.status(202).json(existing);
@@ -340,7 +404,7 @@ api.post("/trips/:id/generate-plan", wrap(async (req, res) => {
 
 api.post("/trips/:id/advise", wrap(async (req, res) => {
   const tripId = Number(req.params.id);
-  assertTripAccess(req.user.id, tripId);
+  assertTripWrite(req.user.id, tripId);
   const b = getBundle(tripId);
   const plan: any = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
   if (!plan) throw Object.assign(new Error("Generate a plan first"), { status: 400 });
@@ -524,7 +588,7 @@ api.get("/places/:id/photo", wrap(async (req, res) => {
 
 // Look up photos (and missing coordinates) for every place that doesn't have one yet.
 api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
-  assertTripAccess(req.user.id, Number(req.params.id));
+  assertTripWrite(req.user.id, Number(req.params.id));
   const key = gmapsKey();
   const b = getBundle(Number(req.params.id));
   const legCity = new Map(b.legs.map((l: any) => [l.id, l.city]));
@@ -600,7 +664,7 @@ api.post(`/trips/:id/places/import-preview`, wrap((req, res) => {
 
 api.post(`/trips/:id/places/import`, wrap((req, res) => {
   const tripId = Number(req.params.id);
-  assertTripAccess(req.user.id, tripId);
+  assertTripWrite(req.user.id, tripId);
   const items: ImportCandidate[] = Array.isArray(req.body.items) ? req.body.items : [];
   const category = typeof req.body.category === "string" ? req.body.category : "other";
   if (items.length === 0) throw Object.assign(new Error("No places selected"), { status: 400 });
