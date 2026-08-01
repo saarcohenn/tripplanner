@@ -472,19 +472,78 @@ a { color: var(--accent-dark); }
 .todo.done .grow { text-decoration: line-through; }
 .todo input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 
-/* ---------- map ---------- */
-/* Controls on top (search, results, legend — all centered in a narrow column), the map
-   itself framed as its own centered, rounded, shadowed card below. */
-.map-page { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
+/* ---------- map (lives at the top of the Places tab) ----------
+   Search on top, the map framed as its own rounded card, legend underneath. Unlike the
+   old standalone Map tab this is a fixed-height block in a scrolling page, not a flex
+   child filling the viewport — so the place grid below it stays reachable. */
+.trip-map { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 18px; }
 .map-controls { width: 100%; max-width: 640px; margin: 0 auto; text-align: center; }
 .map-controls .search-row, .map-controls .result, .map-controls .pending-card { text-align: left; }
 .map-frame {
-  flex: 1; min-height: 360px; width: 100%; max-width: 960px; margin: 0 auto;
+  height: clamp(300px, 46vh, 460px); width: 100%; margin: 0 auto;
   display: flex;
   border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow-lg); overflow: hidden;
+  animation: pop 0.35s var(--ease-out) both;
 }
 .map { flex: 1; min-height: 0; }
+/* Trip-relevant POI layer toggles, above the map. */
+.poi-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+
+/* ---------- on-map tool cluster (bottom-right) ----------
+   Replaces Google's built-in Map/Satellite pill, which rendered half-rounded against the
+   frame and can't be restyled. Sits inside a MapControl, so it must carry its own surface. */
+/* One grouped slab with hairline dividers, mirroring how Google stacks its own map
+   controls — rather than separate floating buttons. */
+.map-tools {
+  position: relative; display: flex; flex-direction: column; margin: 0 10px 10px 0;
+  background: var(--card); border: 1px solid var(--border-strong); border-radius: 10px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.map-tool-btn {
+  width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; border-radius: 0;
+  background: none; color: var(--text); border: none; box-shadow: none;
+}
+.map-tool-btn + .map-tool-btn { border-top: 1px solid var(--border); }
+.map-tool-btn:hover:not(:disabled) {
+  background: var(--card-tint); border: none; box-shadow: none; transform: none;
+}
+.map-tool-btn.active { background: var(--accent-tint); color: var(--accent-dark); }
+.map-settings-panel {
+  position: absolute; bottom: 0; right: calc(100% + 8px); min-width: 132px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  animation: pop 0.18s var(--ease-out) both;
+}
+.map-settings-head {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--muted); padding: 4px 8px 2px;
+}
+.map-settings-item {
+  text-align: left; background: none; border: none; box-shadow: none;
+  padding: 7px 9px; border-radius: 8px; font-size: 12px; color: var(--text);
+}
+.map-settings-item:hover:not(:disabled) {
+  background: var(--card-tint); border: none; box-shadow: none; transform: none;
+}
+.map-settings-item.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
+
+.map-legend-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 20px;
+}
+.map-legend-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.map-legend-bar .legend { margin: 0; justify-content: flex-start; }
+.dot.route { background: repeating-linear-gradient(90deg, var(--shared) 0 3px, transparent 3px 6px); border-radius: 0; }
+/* Leaflet's numbered city pins: the label is a permanent centred tooltip, so strip the
+   default tooltip chrome and leave just the digit. */
+.leg-pin-label {
+  background: none !important; border: none !important; box-shadow: none !important;
+  color: #fff !important; font-size: 11px; font-weight: 700; padding: 0 !important;
+}
+.leg-pin-label::before { display: none !important; }
+.place-card-notes { font-size: 12px; opacity: 0.8; margin: 2px 0; }
 .search-row { display: flex; gap: 6px; }
 .search-row input { flex: 1; }
 .result {
@@ -502,8 +561,26 @@ a { color: var(--accent-dark); }
 }
 .legend li { display: flex; align-items: center; gap: 7px; margin: 0; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.place-card { max-width: 220px; }
-.place-photo { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
+/* ---------- place card (map info window / leaflet popup) ----------
+   Full-bleed photo with the close button floating on top of it, details below. The photo
+   is capped because at natural aspect it alone was taller than the embedded map frame. */
+.place-card { width: 216px; max-width: 100%; font-size: 12px; line-height: 1.4; }
+.place-photo { width: 100%; height: 96px; object-fit: cover; display: block; margin: 0; border-radius: 0; }
+.place-card-body { padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 3px; }
+/* Leave room for the close chip when there's no photo for it to sit on. */
+.place-card:not(.has-photo) .place-card-body { padding-right: 40px; }
+.place-card-title { font-size: 13px; }
+.place-card-meta { color: var(--muted); }
+.place-card-notes { color: var(--muted); font-size: 11px; }
+.place-card-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 5px; }
+.place-card-jump {
+  padding: 5px 10px; font-size: 11px; border-radius: 7px;
+  background: var(--accent-tint); color: var(--accent-dark);
+  border: 1px solid transparent; box-shadow: none; font-weight: 600;
+}
+.place-card-jump:hover:not(:disabled) {
+  background: var(--accent); color: var(--on-accent); border-color: var(--accent); box-shadow: none;
+}
 .thumb-cell { width: 66px; }
 .place-thumb { width: 58px; height: 44px; object-fit: cover; border-radius: 8px; display: block; box-shadow: var(--shadow); }
 .place-thumb.empty {
@@ -547,6 +624,7 @@ a { color: var(--accent-dark); }
   gap: 14px; margin: 10px 0 22px;
 }
 .pcard {
+  position: relative; cursor: pointer;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
   transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out),
@@ -554,6 +632,13 @@ a { color: var(--accent-dark); }
   animation: pop 0.32s var(--ease-out) both;
 }
 .pcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
+/* Selected card ↔ selected map pin are the same state, so they share the accent ring. */
+.pcard.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg);
+}
+/* Category stripe down the photo's leading edge, matching that category's map-pin colour. */
+.pcard-cat { position: absolute; top: 0; left: 0; width: 5px; height: 160px; z-index: 1; }
 .pcard.dropped { opacity: 0.5; }
 .pcard-img { width: 100%; height: 160px; object-fit: cover; display: block; transition: transform 0.4s var(--ease-out); }
 .pcard:hover .pcard-img { transform: scale(1.04); }
@@ -780,6 +865,43 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
 .leaflet-popup-content a { color: var(--accent-dark); }
 
+/* ---------- google maps info window ----------
+   Google renders the bubble itself (always white) and we render the content inside it, so
+   in dark mode our light --text landed on white and vanished. Repaint the bubble, its
+   scroll container and its pointer arrow to match the app's card surface. !important is
+   required: these are Google's own inline/injected styles. */
+.gm-style .gm-style-iw-c {
+  background: var(--card) !important; box-shadow: var(--shadow-lg) !important;
+  padding: 0 !important; border-radius: 12px !important; overflow: hidden !important;
+}
+/* Google hardcodes overflow:scroll here, so a permanently-visible scrollbar gutter sat
+   beside the content as a pale strip even when nothing overflowed. */
+.gm-style .gm-style-iw-d { background: var(--card) !important; overflow: auto !important; scrollbar-width: thin; }
+.gm-style .gm-style-iw-d > div { padding: 0 !important; }
+.gm-style .gm-style-iw-tc::after { background: var(--card) !important; }
+.gm-style .gm-style-iw-c, .gm-style .gm-style-iw-d { color: var(--text) !important; }
+.gm-style .gm-style-iw-c a { color: var(--accent-dark) !important; }
+
+/* Google puts the close button in a header row above the content, which pushed the photo
+   down and left a dead band across the top of the card. Collapse that row to zero height
+   and float the button over the photo instead. */
+.gm-style .gm-style-iw-chr {
+  position: absolute; top: 0; right: 0; z-index: 2; height: 0 !important; min-height: 0 !important;
+}
+.gm-style .gm-style-iw-ch { display: none !important; }
+.gm-style .gm-ui-hover-effect {
+  width: 26px !important; height: 26px !important; margin: 7px !important;
+  border-radius: 50% !important; background: rgba(0, 0, 0, 0.5) !important;
+  display: flex !important; align-items: center; justify-content: center;
+}
+.gm-style .gm-ui-hover-effect:hover { background: rgba(0, 0, 0, 0.72) !important; }
+/* The ✕ is a mask-image tinted by background-color — always white, since it now sits on a
+   dark scrim over the photo rather than on the bubble's own surface. */
+.gm-style .gm-ui-hover-effect > span {
+  width: 16px !important; height: 16px !important; margin: 0 !important;
+  background-color: #fff !important;
+}
+
 /* ---------- mobile ---------- */
 @media (max-width: 768px) {
   .app { flex-direction: column; height: 100dvh; }
@@ -816,8 +938,12 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   .pad { padding: 10px 12px calc(28px + env(safe-area-inset-bottom)); }
   .banner { margin: 6px 12px 0; padding: 7px 12px; font-size: 12px; border-radius: 8px; }
 
-  .map-frame { border-radius: 12px; margin-bottom: calc(6px + env(safe-area-inset-bottom)); }
-  .map { min-height: 320px; }
+  .map-frame { border-radius: 12px; height: clamp(260px, 40vh, 340px); }
+  .map { min-height: 0; }
+  .map-legend-bar { justify-content: center; }
+  .map-legend-bar .legend { justify-content: center; }
+  /* Photos are taller on phones, so the category stripe has to match. */
+  .pcard-cat { height: 190px; }
   .plan-layout { flex-direction: column; overflow-y: auto; }
   .plan-days { overflow: visible; padding: 10px 12px; }
   .advisor {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
+import TripMap, { CATEGORY_COLORS } from "./TripMap";
 
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
@@ -18,12 +19,13 @@ function FilterIcon() {
   );
 }
 
-export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generatePlan }: {
+export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generatePlan, theme }: {
   detail: TripDetail;
   refresh: () => Promise<void>;
   gmapsKey: string | null;
   llmReady: boolean;
   generatePlan: () => Promise<void>;
+  theme: "light" | "dark";
 }) {
   const { trip, legs, places } = detail;
   const [form, setForm] = useState({ name: "", leg_id: "" as number | "", category: "sight", duration_min: 90, priority: "want", notes: "" });
@@ -31,6 +33,30 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [gateOpen, setGateOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const autoFetchedTrip = useRef<number | null>(null);
+
+  // Shared selection between the map and the grid below it: clicking a pin highlights and
+  // scrolls to its card, clicking a card pans the map to its pin.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Bumping this asks the map to recentre. Selecting alone deliberately doesn't move the
+  // map — only an explicit jump (card double-click, or the info window's button) does.
+  const [jumpNonce, setJumpNonce] = useState(0);
+  const cardRefs = useRef(new Map<number, HTMLDivElement>());
+  const selectedFromMap = useRef(false);
+
+  useEffect(() => { setSelectedId(null); }, [trip.id]);
+
+  // Only auto-scroll when the selection came from the map — scrolling the list because the
+  // user just clicked a card in that same list would yank it out from under them.
+  useEffect(() => {
+    if (selectedId == null || !selectedFromMap.current) return;
+    selectedFromMap.current = false;
+    cardRefs.current.get(selectedId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedId]);
+
+  function selectFromMap(id: number | null) {
+    selectedFromMap.current = id != null;
+    setSelectedId(id);
+  }
 
   // ---- import a Google Maps "Saved" list (via a Takeout .json export) ----
   const [importOpen, setImportOpen] = useState(false);
@@ -140,7 +166,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   }
 
   // ---- add-place name intellisense: Google Places when a Maps key is set, OpenStreetMap
-  // (Nominatim) fallback otherwise — same provider split MapTab's search already uses. ----
+  // (Nominatim) fallback otherwise — same provider split the map's search above uses. ----
   const [nameHits, setNameHits] = useState<NameHit[]>([]);
   const [nameSearching, setNameSearching] = useState(false);
   const [showNameHits, setShowNameHits] = useState(false);
@@ -268,6 +294,14 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   return (
     <div className="pad">
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
+
+      <TripMap
+        detail={detail} refresh={refresh} gmapsKey={gmapsKey} llmReady={llmReady}
+        generatePlan={generatePlan} theme={theme}
+        selectedId={selectedId} onSelect={selectFromMap}
+        jumpNonce={jumpNonce} onJump={() => setJumpNonce((n) => n + 1)}
+      />
+
       <div className="row spread">
         <h2>
           Places ({places.filter((p) => p.status === "active").length} active)
@@ -440,17 +474,27 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
       {groups.map((g) => (
         <div key={g.label}>
           <h3 dir="auto">{g.label}</h3>
-          {g.items.length === 0 && <p className="hint">No places yet — add them here or from the Map tab.</p>}
+          {g.items.length === 0 && <p className="hint">No places yet — add them from the map above or the ＋ button.</p>}
           <div className="place-grid">
             {g.items.map((p) => (
-              <div key={p.id} className={`pcard ${p.status === "dropped" ? "dropped" : ""}`}>
+              <div
+                key={p.id}
+                ref={(el) => { if (el) cardRefs.current.set(p.id, el); else cardRefs.current.delete(p.id); }}
+                className={`pcard ${p.status === "dropped" ? "dropped" : ""}${p.id === selectedId ? " selected" : ""}`}
+                title="Click to show on the map · double-click to jump to it"
+                // Select (don't toggle) so a double-click doesn't deselect on its first click.
+                onClick={() => setSelectedId(p.id)}
+                onDoubleClick={() => { setSelectedId(p.id); setJumpNonce((n) => n + 1); }}
+              >
                 {p.photo_ref
                   ? <img className="pcard-img" src={`/api/places/${p.id}/photo`} alt={p.name} loading="lazy" />
                   : <div className="pcard-img empty">🏞️</div>}
+                <span className="pcard-cat" style={{ background: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other }} />
                 <div className="pcard-body">
                   <div className="row spread">
                     <strong dir="auto">{p.name}</strong>
-                    <a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps">🗺️</a>
+                    <a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps"
+                      onClick={(e) => e.stopPropagation()}>🗺️</a>
                   </div>
                   {p.notes && (
                     <div className="hint" dir="auto">
@@ -458,7 +502,10 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                       {p.notes}
                     </div>
                   )}
-                  <div className="pcard-controls">
+                  {/* The card selects on click and jumps on double-click, so its controls
+                      must swallow both or fiddling with a dropdown would move the map. */}
+                  <div className="pcard-controls"
+                    onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     <select value={p.category} onChange={(e) => patch(p, { category: e.target.value })}>
                       {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                     </select>
@@ -470,7 +517,8 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                         onChange={(e) => patch(p, { duration_min: Number(e.target.value) })} /> min
                     </span>
                   </div>
-                  <div className="row pcard-actions">
+                  <div className="row pcard-actions"
+                    onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     {p.status === "active"
                       ? <button className="small" title="Drop from plan (keep in list)" onClick={() => patch(p, { status: "dropped" })}>Drop</button>
                       : <button className="small" title="Restore to plan" onClick={() => patch(p, { status: "active" })}>Restore</button>}

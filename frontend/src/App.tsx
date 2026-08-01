@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { AppConfig, Notification, PlanJob, Trip, TripDetail, User } from "./types";
 import OverviewTab from "./components/OverviewTab";
-import MapTab from "./components/MapTab";
 import PlacesTab from "./components/PlacesTab";
 import PlanTab from "./components/PlanTab";
 import TodosTab from "./components/TodosTab";
@@ -16,10 +15,10 @@ import SetupAdminForm from "./components/SetupAdminForm";
 import AuthGate from "./components/AuthGate";
 import Backdrop from "./components/Backdrop";
 
-const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Rooms", "Profile", "Settings"] as const;
+const TABS = ["Overview", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Rooms", "Profile", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 /** Pages scoped to the selected trip vs. app-wide pages (drawer groups them separately). */
-const TRIP_TABS: Tab[] = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses"];
+const TRIP_TABS: Tab[] = ["Overview", "Places", "Plan", "Todos", "Bookings", "Expenses"];
 
 export default function App() {
   const [authState, setAuthState] = useState<"checking" | "needsSetup" | "loggedOut" | "ready">("checking");
@@ -57,6 +56,8 @@ export default function App() {
   // Tab is deep-linkable via the URL hash (e.g. /#Plan) and kept in sync for reload/PWA re-entry
   const [tab, setTab] = useState<Tab>(() => {
     const h = decodeURIComponent(window.location.hash.slice(1));
+    // The Map tab was folded into Places — send old bookmarks/PWA shortcuts there.
+    if (h === "Map") return "Places";
     return (TABS as readonly string[]).includes(h) ? (h as Tab) : "Overview";
   });
   useEffect(() => { window.history.replaceState(null, "", `#${tab}`); }, [tab]);
@@ -401,12 +402,9 @@ export default function App() {
         ) : tab === "Overview" ? (
           // key: remount per trip so form state seeded from the trip doesn't survive a trip switch
           <OverviewTab key={detail.trip.id} detail={detail} refresh={refresh} />
-        ) : tab === "Map" ? (
-          <MapTab detail={detail} refresh={refresh} gmapsKey={appConfig?.google_maps_api_key || null}
-            llmReady={llmReady} generatePlan={generatePlan} />
         ) : tab === "Places" ? (
           <PlacesTab detail={detail} refresh={refresh} gmapsKey={appConfig?.google_maps_api_key || null}
-            llmReady={llmReady} generatePlan={generatePlan} />
+            llmReady={llmReady} generatePlan={generatePlan} theme={theme} />
         ) : tab === "Plan" ? (
           <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan}
             reAdvise={reAdvise} planJob={planJob} busy={!!busy} />
