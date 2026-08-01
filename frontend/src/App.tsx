@@ -67,6 +67,31 @@ export default function App() {
   const [planJob, setPlanJob] = useState<PlanJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // index.html already resolved and stamped this before first paint (avoiding a light-mode
+  // flash); read it back rather than recomputing, so the two can never disagree.
+  const [theme, setTheme] = useState<"light" | "dark">(
+    () => (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light")
+  );
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? "#0a0f1e" : "#f7f1e8");
+  }, [theme]);
+  // Follow the OS while the user hasn't made an explicit choice.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem("theme")) setTheme(e.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  function toggleTheme() {
+    // Persist outside the updater — a setState callback must stay pure (StrictMode runs it twice).
+    const next = theme === "dark" ? "light" : "dark";
+    localStorage.setItem("theme", next);
+    setTheme(next);
+  }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -234,6 +259,12 @@ export default function App() {
             ? <>{detail.trip.name} <span className="crumb-sep">›</span> {tab}</>
             : tab}
         </div>
+        <div className="sidebar-tools">
+        <button
+          className="theme-toggle" onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >{theme === "dark" ? "☀" : "☾"}</button>
         <div className="notif-wrap" ref={notifRef}>
           <button className="notif-bell" aria-label="Notifications" onClick={toggleNotifications}>
             🔔
@@ -257,6 +288,7 @@ export default function App() {
             </div>
           )}
         </div>
+        </div>
         <h1>🧭 TripPlanner</h1>
         <button className="primary" onClick={createTrip}>+ New trip</button>
         <ul className="trip-list">
@@ -268,11 +300,14 @@ export default function App() {
                     className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
                     title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
                   />
-                  {t.name}
+                  <span className="trip-name-text" title={t.name}>{t.name}</span>
                 </span>
-                {sharedLabel(t) && <span className="trip-shared-badge">{sharedLabel(t)}</span>}
+                {sharedLabel(t) && (
+                  <span className="trip-shared-badge" title={sharedLabel(t)!}>{sharedLabel(t)}</span>
+                )}
               </button>
-              <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
+              <button className="trip-del" title="Delete trip" aria-label={`Delete ${t.name}`}
+                onClick={() => deleteTrip(t.id)}>✕</button>
             </li>
           ))}
         </ul>
@@ -309,11 +344,14 @@ export default function App() {
                       className={`stage-dot ${t.stage === "planned" ? "planned" : ""}`}
                       title={t.stage === "planned" ? "Plan generated" : "Collecting places"}
                     />
-                    {t.name}
+                    <span className="trip-name-text" title={t.name}>{t.name}</span>
                   </span>
-                  {sharedLabel(t) && <span className="trip-shared-badge">{sharedLabel(t)}</span>}
+                  {sharedLabel(t) && (
+                    <span className="trip-shared-badge" title={sharedLabel(t)!}>{sharedLabel(t)}</span>
+                  )}
                 </button>
-                <button className="danger small" title="Delete trip" onClick={() => deleteTrip(t.id)}>✕</button>
+                <button className="trip-del" title="Delete trip" aria-label={`Delete ${t.name}`}
+                  onClick={() => deleteTrip(t.id)}>✕</button>
               </div>
             ))}
             <button className="drawer-item" onClick={() => { setMenuOpen(false); void createTrip(); }}>＋ New trip</button>

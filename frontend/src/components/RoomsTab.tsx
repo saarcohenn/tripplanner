@@ -171,7 +171,7 @@ function RoomCard({ room, currentUser, trips, reloadTrips }: {
                 </div>
               )}
 
-              {error && <p className="hint" style={{ color: "var(--danger, #c93b3b)" }}>{error}</p>}
+              {error && <p className="hint" style={{ color: "var(--danger)" }}>{error}</p>}
             </>
           )}
         </div>

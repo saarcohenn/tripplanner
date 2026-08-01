@@ -1,5 +1,9 @@
+/* Two themes off one token set. index.html stamps data-theme on <html> before first paint
+   (resolving the saved choice, else the OS preference) so there's never a light-mode flash.
+   Every colour below must be a token — a raw hex anywhere in this file is a dark-mode bug. */
+
 /* Warm light theme — palette: #374001 olive · #e88005 orange · #5a1903 brown · #e86431 coral · #e8412f red · #fff */
-:root {
+:root, :root[data-theme="light"] {
   --bg: #f7f1e8;
   --card: #ffffff;
   --card-tint: #fdf8f1;
@@ -14,12 +18,76 @@
   --olive: #5f7a0e;
   --olive-bright: #8aa016;
   --danger: #e8412f;
+  --danger-tint: #fdecea;
   --warn: #e86431;
   --shared: #6b5b95;
   --shared-tint: #efe9f6;
   --shadow: 0 1px 2px rgba(90, 25, 3, 0.06), 0 4px 14px rgba(90, 25, 3, 0.07);
   --shadow-lg: 0 4px 10px rgba(90, 25, 3, 0.1), 0 16px 40px rgba(90, 25, 3, 0.14);
+
+  --on-accent: #ffffff;              /* text on a filled accent surface */
+  --on-danger: #ffffff;
+  --accent-glow: 0 2px 8px rgba(232, 128, 5, 0.32);
+  --focus-ring: 0 0 0 3px rgba(232, 128, 5, 0.15);
+  --overlay: rgba(51, 32, 15, 0.45); /* modal + drawer scrim */
+  --track: #f1e6d6;                  /* empty half of a progress/budget bar */
+  --table-line: #f5ecdf;
+  --placeholder: #bfa68c;
+  --transit: #a05a24;                /* transit/flight rows in the daily plan */
+  --stage-idle: #cdb99c;
+  --stage-idle-ring: rgba(205, 185, 156, 0.28);
+  --stage-planned: #34a853;
+  --stage-planned-ring: rgba(52, 168, 83, 0.22);
+  --banner-error-bg: #fdecea; --banner-error-fg: #a1160a; --banner-error-bd: #f5c1ba;
+  --banner-warn-bg: #fdf3e2;  --banner-warn-fg: #8a5200;  --banner-warn-bd: #f2ddb8;
+  --banner-busy-bg: #fdeedd;  --banner-busy-fg: #995805;  --banner-busy-bd: #f4d6b0;
 }
+
+/* Deep-night theme — cool navy surfaces with a violet cast, brand orange kept as the accent
+   so it reads as the same product after dark rather than a different app. */
+:root[data-theme="dark"] {
+  --bg: #0a0f1e;
+  --card: #121a2e;
+  --card-tint: #18223a;
+  --border: #253150;
+  --border-strong: #35446b;
+  --text: #e6ecfa;
+  --muted: #8fa0c4;
+  --accent: #f59331;
+  --accent-dark: #ffb057;            /* "dark" == more emphatic; on navy that means lighter */
+  --accent-tint: #33260f;
+  --coral: #ff7d54;
+  --olive: #9fc44a;
+  --olive-bright: #a8d84f;
+  --danger: #ff6152;
+  --danger-tint: #3a1c1c;
+  --warn: #ff8a5c;
+  --shared: #b9a5f0;
+  --shared-tint: #2a2445;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.46), 0 18px 44px rgba(0, 0, 0, 0.56);
+
+  --on-accent: #1b1103;
+  --on-danger: #2a0d0a;
+  --accent-glow: 0 2px 12px rgba(245, 147, 49, 0.34);
+  --focus-ring: 0 0 0 3px rgba(245, 147, 49, 0.24);
+  --overlay: rgba(3, 6, 15, 0.66);
+  --track: #202b47;
+  --table-line: #1e2841;
+  --placeholder: #6d7d9f;
+  --transit: #d5a071;
+  --stage-idle: #46557c;
+  --stage-idle-ring: rgba(70, 85, 124, 0.35);
+  --stage-planned: #3ddc84;
+  --stage-planned-ring: rgba(61, 220, 132, 0.26);
+  --banner-error-bg: #341a1c; --banner-error-fg: #ffb0a6; --banner-error-bd: #5c2a2a;
+  --banner-warn-bg: #33260f;  --banner-warn-fg: #ffcf94;  --banner-warn-bd: #5a4320;
+  --banner-busy-bg: #24243f;  --banner-busy-fg: #c3c0f5;  --banner-busy-bd: #3d3c66;
+}
+
+/* Native widgets (scrollbars, date pickers, form controls) follow this instead of guessing. */
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -39,15 +107,19 @@ body {
   border-right: 1px solid var(--border);
   padding: 18px 14px; display: flex; flex-direction: column; gap: 12px;
 }
-.notif-wrap { position: absolute; top: 14px; right: 14px; }
-.notif-bell {
+/* Bell + theme toggle share one cluster pinned to the sidebar's top-right corner. */
+.sidebar-tools { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 2px; }
+.notif-wrap { position: relative; }
+.notif-bell, .theme-toggle {
   position: relative;
   background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted);
   padding: 4px 7px; border-radius: 8px; line-height: 1;
 }
-.notif-bell:hover { background: var(--card-tint); color: var(--text); }
+.notif-bell:hover, .theme-toggle:hover:not(:disabled) {
+  background: var(--card-tint); color: var(--text); border: none; box-shadow: none;
+}
 .notif-badge {
-  position: absolute; top: -3px; right: -1px; background: var(--danger); color: #fff;
+  position: absolute; top: -3px; right: -1px; background: var(--danger); color: var(--on-danger);
   font-size: 9px; font-weight: 700; border-radius: 999px; min-width: 14px; height: 14px;
   display: flex; align-items: center; justify-content: center; padding: 0 3px;
 }
@@ -68,16 +140,39 @@ body {
 .trip-list li.active { background: var(--accent-tint); }
 .trip-list li.active .trip-name { color: var(--accent-dark); font-weight: 600; }
 .trip-name {
-  flex: 1; text-align: left; background: none; border: none; color: var(--text);
+  /* min-width:0 — a flex item defaults to min-width:auto, so without this the row refuses
+     to shrink below the trip name's intrinsic width and overflows past the delete button. */
+  flex: 1; min-width: 0; text-align: left; background: none; border: none; color: var(--text);
   padding: 9px 10px; cursor: pointer; border-radius: 8px; font-size: 13px;
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
 }
 .trip-name:hover { background: var(--card-tint); }
 .trip-list li.active .trip-name:hover { background: transparent; }
-.trip-name-row { display: flex; align-items: center; }
+.trip-name-row { display: flex; align-items: center; min-width: 0; width: 100%; }
+.trip-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Room names get long ("via Japan trip with Second User") — one clipped line, never a
+   three-line pill that shoves the trip name into a narrow column. Full text is in title=. */
 .trip-shared-badge {
   font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
-  background: var(--shared-tint); color: var(--shared); margin-left: 17px;
+  background: var(--shared-tint); color: var(--shared); margin-left: 19px;
+  max-width: calc(100% - 19px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Ghost icon button — the old bordered ✕ read as heavy as the trip name next to it. */
+.trip-del {
+  flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; box-shadow: none; border-radius: 8px;
+  color: var(--muted); font-size: 12px; line-height: 1;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+.trip-del:hover:not(:disabled) {
+  background: var(--danger-tint); color: var(--danger); border: none; box-shadow: none;
+}
+/* Only hide-until-hover where hovering exists — on touch there'd be no way to reveal it. */
+@media (hover: hover) {
+  .trip-del { opacity: 0; }
+  .trip-list li:hover .trip-del, .trip-list li.active .trip-del,
+  .drawer-trip:hover .trip-del, .trip-del:focus-visible { opacity: 1; }
 }
 .sidebar-footer { font-size: 12px; }
 .sidebar-app-nav {
@@ -91,11 +186,18 @@ body {
 .sidebar-app-nav button:hover { background: var(--card-tint); color: var(--text); }
 .sidebar-app-nav button.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
 
+/* The "plan generated" light is the one status signal in the trip list — it was a muted
+   olive that vanished against the cream background, so it's now a saturated green with a
+   ring plus an outward glow, and a distinctly dimmer idle state to contrast against. */
 .stage-dot {
-  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-  background: var(--border-strong); margin-right: 8px;
+  display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--stage-idle); box-shadow: 0 0 0 2px var(--stage-idle-ring);
+  margin-right: 10px; transition: background 0.2s, box-shadow 0.2s;
 }
-.stage-dot.planned { background: var(--olive-bright); box-shadow: 0 0 0 3px #8aa01622; }
+.stage-dot.planned {
+  background: var(--stage-planned);
+  box-shadow: 0 0 0 2px var(--stage-planned-ring), 0 0 9px var(--stage-planned);
+}
 
 /* ---------- main frame + tabs ---------- */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -105,7 +207,7 @@ body {
   cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 999px;
 }
 .tab:hover { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
-.tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(232, 128, 5, 0.35); }
+.tab.active { background: var(--accent); color: var(--on-accent); box-shadow: var(--accent-glow); }
 
 .main > div:not(.banner), .pad { overflow-y: auto; }
 .pad { padding: 14px 22px 28px; }
@@ -119,9 +221,9 @@ body {
   margin: 8px 18px 0; padding: 10px 16px; font-size: 13px;
   border-radius: 10px; border: 1px solid;
 }
-.banner.error { background: #fdecea; color: #a1160a; border-color: #f5c1ba; cursor: pointer; }
-.banner.warn { background: #fdf3e2; color: #8a5200; border-color: #f2ddb8; }
-.banner.busy { background: #fdeedd; color: #995805; border-color: #f4d6b0; }
+.banner.error { background: var(--banner-error-bg); color: var(--banner-error-fg); border-color: var(--banner-error-bd); cursor: pointer; }
+.banner.warn { background: var(--banner-warn-bg); color: var(--banner-warn-fg); border-color: var(--banner-warn-bd); }
+.banner.busy { background: var(--banner-busy-bg); color: var(--banner-busy-fg); border-color: var(--banner-busy-bd); }
 
 /* ---------- buttons ---------- */
 button {
@@ -132,8 +234,8 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); box-shadow: var(--shadow); }
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary {
-  background: var(--accent); border-color: var(--accent); color: #fff;
-  box-shadow: 0 2px 8px rgba(232, 128, 5, 0.3);
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  box-shadow: var(--accent-glow);
 }
 button.primary:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
 button.danger { color: var(--danger); }
@@ -152,10 +254,10 @@ input, select, textarea {
   border-radius: 9px; padding: 8px 11px; font-size: 13px; font-family: inherit;
 }
 input:focus, select:focus, textarea:focus {
-  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232, 128, 5, 0.15);
+  outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
 }
 textarea { width: 100%; resize: vertical; }
-::placeholder { color: #bfa68c; }
+::placeholder { color: var(--placeholder); }
 label.block { display: block; margin: 12px 0; font-weight: 500; }
 label.block > input, label.block > select { display: block; width: 100%; margin-top: 5px; font-weight: 400; }
 label.block.row { display: flex; align-items: center; gap: 8px; }
@@ -192,7 +294,7 @@ a { color: var(--accent-dark); }
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow); margin: 10px 0 20px; overflow: hidden;
 }
-.table td, .table th { padding: 10px 12px; border-bottom: 1px solid #f5ecdf; text-align: left; vertical-align: middle; }
+.table td, .table th { padding: 10px 12px; border-bottom: 1px solid var(--table-line); text-align: left; vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
 .table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: var(--card-tint); }
 .table tr.dropped { opacity: 0.45; }
@@ -298,7 +400,7 @@ a { color: var(--accent-dark); }
 .item:last-child { border-bottom: none; }
 .item .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; font-weight: 600; font-size: 12px; }
 .item.kind-rest { color: var(--olive); }
-.item.kind-transit, .item.kind-flight { color: #a05a24; }
+.item.kind-transit, .item.kind-flight { color: var(--transit); }
 .item-details { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
 .item-tip { font-size: 12px; color: var(--olive); margin-top: 2px; }
 
@@ -340,7 +442,7 @@ a { color: var(--accent-dark); }
   border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 500;
 }
 .chip-toggle:hover:not(:disabled) { border-color: var(--accent); box-shadow: none; }
-.chip-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip-toggle.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .icon-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
@@ -427,7 +529,7 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 }
 .exp-stat.grow { flex: 1; min-width: 220px; }
 .exp-num { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
-.budget-bar { height: 12px; background: #f1e6d6; border-radius: 999px; overflow: hidden; }
+.budget-bar { height: 12px; background: var(--track); border-radius: 999px; overflow: hidden; }
 .budget-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.3s; min-width: 0; }
 .budget-fill.over { background: var(--danger); }
 .over-text { color: var(--danger); }
@@ -438,7 +540,7 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 }
 .exp-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
 .exp-label { width: 90px; font-size: 12px; color: var(--muted); text-align: right; }
-.exp-bar-track { flex: 1; height: 10px; background: #f1e6d6; border-radius: 999px; overflow: hidden; }
+.exp-bar-track { flex: 1; height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; }
 .exp-bar { height: 100%; background: var(--accent); border-radius: 999px; }
 .exp-amt { width: 60px; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -467,7 +569,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 
 /* ---------- modal ---------- */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(51, 32, 15, 0.45);
+  position: fixed; inset: 0; background: var(--overlay);
   display: flex; align-items: center; justify-content: center; z-index: 1000;
 }
 .modal {
@@ -483,7 +585,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 .hamburger { display: none; }
 .crumb { display: none; }
 .drawer-overlay {
-  position: fixed; inset: 0; background: rgba(51, 32, 15, 0.45); z-index: 1200;
+  position: fixed; inset: 0; background: var(--overlay); z-index: 1200;
 }
 .drawer {
   position: absolute; top: 0; left: 0; bottom: 0; width: 250px;
@@ -504,7 +606,11 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   letter-spacing: 0.6px; color: var(--muted);
 }
 .drawer-trip { display: flex; align-items: center; gap: 4px; }
-.drawer-trip .drawer-item { flex: 1; }
+/* Trip rows stack name-over-badge; .drawer-item's default centred row put the badge
+   beside the name, squeezing long trip names into a three-line column. */
+.drawer-trip .drawer-item {
+  flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 3px;
+}
 .drawer-app { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
 .drawer-app h4 { margin-top: 0; }
 .drawer-item {
@@ -531,9 +637,9 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
     border-right: none; border-bottom: 1px solid var(--border);
   }
   .sidebar h1, .sidebar > button.primary, .trip-list, .sidebar-footer { display: none; }
-  /* On mobile the bell rides in the hamburger/crumb row instead of floating over it. */
-  .notif-wrap { position: relative; top: auto; right: auto; }
-  /* On mobile the wrap sits at the row's right edge, so the panel must open leftward instead. */
+  /* On mobile the tools ride in the hamburger/crumb row instead of floating over it. */
+  .sidebar-tools { position: relative; top: auto; right: auto; flex: 0 0 auto; }
+  /* On mobile the cluster sits at the row's right edge, so the panel must open leftward. */
   .notif-panel { left: auto; right: -8px; }
   .hamburger {
     display: inline-flex; align-items: center; justify-content: center;

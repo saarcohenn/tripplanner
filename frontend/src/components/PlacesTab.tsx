@@ -356,7 +356,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
             {importFileName && <span className="hint" dir="auto">{importFileName}</span>}
           </div>
           {importBusy && <p className="hint">Reading file…</p>}
-          {importError && <p className="hint" style={{ color: "var(--danger, #c93b3b)" }}>{importError}</p>}
+          {importError && <p className="hint" style={{ color: "var(--danger)" }}>{importError}</p>}
           {importItems && (
             <>
               <div className="row spread" style={{ marginTop: 8 }}>
@@ -370,7 +370,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                   </select>
                 </label>
               </div>
-              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border, #333)", borderRadius: 8, padding: 8 }}>
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 8 }}>
                 {importItems.map((it, i) => (
                   <label key={i} className="row" style={{ gap: 8, padding: "4px 0" }} dir="auto">
                     <input type="checkbox" checked={importSelected.has(i)} onChange={() => toggleImportSelected(i)} />
