@@ -1005,6 +1005,69 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   button.small { padding: 6px 10px; }
 }
 
+/* ---------- date range picker ---------- */
+/* The range field carries two dates plus a nights badge, so it needs more room than a
+   single form-grid cell gives it. */
+.drp-label { grid-column: span 2; }
+.drp { position: relative; }
+.drp-field {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--card); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 9px; padding: 8px 11px; font-size: 13px; text-align: left; font-weight: 400;
+}
+.drp-field.open, .drp-field:focus-visible { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.drp-field:hover:not(:disabled) { transform: none; }
+.drp-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drp-placeholder { color: var(--placeholder); }
+.drp-nights {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-tint); color: var(--accent-dark);
+}
+.drp-clear { flex: 0 0 auto; color: var(--muted); font-size: 12px; padding: 0 2px; cursor: pointer; }
+.drp-clear:hover { color: var(--danger); }
+
+.drp-pop {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-lg); padding: 12px; animation: pop 0.18s var(--ease-out) both;
+}
+.drp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.drp-hint { font-size: 12px; color: var(--muted); font-weight: 500; }
+.drp-nav {
+  width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; box-shadow: none; border-radius: 8px;
+  color: var(--muted); font-size: 17px; line-height: 1;
+}
+.drp-nav:hover:not(:disabled) { background: var(--card-tint); color: var(--text); border: none; box-shadow: none; transform: none; }
+.drp-months { display: flex; gap: 20px; }
+.drp-month-name { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+.drp-weekdays, .drp-grid { display: grid; grid-template-columns: repeat(7, 32px); }
+.drp-weekdays span {
+  text-align: center; font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.4px; padding-bottom: 4px;
+}
+.drp-day {
+  height: 30px; padding: 0; font-size: 12px; border-radius: 0;
+  background: none; border: none; box-shadow: none; color: var(--text);
+}
+.drp-day.empty { visibility: hidden; }
+.drp-day:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; transform: none; }
+.drp-day.today { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+/* Range fill sits behind the endpoints, which get the solid accent chip. */
+.drp-day.in { background: var(--accent-tint); color: var(--accent-dark); }
+.drp-day.sel { background: var(--accent); color: var(--on-accent); font-weight: 700; border-radius: 8px; }
+.drp-day.from { border-radius: 8px 0 0 8px; }
+.drp-day.to { border-radius: 0 8px 8px 0; }
+.drp-day.sel:hover:not(:disabled) { background: var(--accent-dark); }
+
+@media (max-width: 768px) {
+  /* Two month grids don't fit a phone; the popover shows one and scrolls by month. */
+  .drp-months { gap: 0; }
+  .drp-month:not(:first-child) { display: none; }
+  .drp-pop { left: 0; right: 0; }
+  .drp-weekdays, .drp-grid { grid-template-columns: repeat(7, 1fr); }
+}
+
 /* ---------- wide screens ----------
    Past ~1400px a single column just stretches every field across the viewport while the
    page still scrolls. These rules spend the horizontal room instead, so more of each tab

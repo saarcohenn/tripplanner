@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { api } from "../api";
 import type { Leg, Place, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
+import DateRangePicker from "./DateRangePicker";
 
 function fmtDate(d: string | null): string {
   if (!d) return "?";
@@ -229,8 +230,12 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
             <option value="multicity">Multi-city</option>
           </select>
         </label>
-        <label>Start <input type="date" value={form.start_date ?? ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></label>
-        <label>End <input type="date" value={form.end_date ?? ""} onChange={(e) => setForm({ ...form, end_date: e.target.value })} /></label>
+        <label className="drp-label">Dates
+          <DateRangePicker
+            start={form.start_date} end={form.end_date}
+            onChange={(s, e) => setForm({ ...form, start_date: s, end_date: e })}
+          />
+        </label>
         <label>Home city <input dir="auto" value={form.home_city ?? ""} onChange={(e) => setForm({ ...form, home_city: e.target.value })} /></label>
         <label>Budget <input type="number" value={form.budget ?? ""} onChange={(e) => setForm({ ...form, budget: e.target.value as any })} /></label>
         <label>Budget currency <CurrencySelect value={form.currency || "USD"} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} /></label>
@@ -253,11 +258,11 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
           </label>
         </div>
         <label className="block">Dates
-          <div className="row date-range">
-            <input type="date" title="Arrival date" value={newLeg.arrive_date} onChange={(e) => setNewLeg({ ...newLeg, arrive_date: e.target.value })} />
-            <span className="hint date-range-arrow">→</span>
-            <input type="date" title="Departure date" value={newLeg.depart_date} onChange={(e) => setNewLeg({ ...newLeg, depart_date: e.target.value })} />
-          </div>
+          <DateRangePicker
+            start={newLeg.arrive_date || null} end={newLeg.depart_date || null}
+            startLabel="Arrive" endLabel="Depart"
+            onChange={(a, d) => setNewLeg({ ...newLeg, arrive_date: a || "", depart_date: d || "" })}
+          />
         </label>
         <button className="primary" onClick={addLeg}>+ Add leg</button>
       </div>
@@ -298,11 +303,11 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
                     </label>
                   </div>
                   <label className="block">Dates
-                    <div className="row date-range">
-                      <input type="date" defaultValue={l.arrive_date ?? ""} onBlur={(e) => e.target.value !== (l.arrive_date ?? "") && updateLeg(l, { arrive_date: e.target.value || null })} />
-                      <span className="hint date-range-arrow">→</span>
-                      <input type="date" defaultValue={l.depart_date ?? ""} onBlur={(e) => e.target.value !== (l.depart_date ?? "") && updateLeg(l, { depart_date: e.target.value || null })} />
-                    </div>
+                    <DateRangePicker
+                      start={l.arrive_date} end={l.depart_date}
+                      startLabel="Arrive" endLabel="Depart"
+                      onChange={(a, d) => updateLeg(l, { arrive_date: a, depart_date: d })}
+                    />
                   </label>
                   <div className="row spread">
                     <span />
