@@ -162,6 +162,10 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
     <div className="pad">
       {/* Driven by the form (not the saved trip) so it re-counts live as you pick dates. */}
       <Countdown start={form.start_date} end={form.end_date} />
+      {/* Two independent groups — side by side once there's width for it, so a wide screen
+          shows the whole trip without scrolling instead of stretching one long column. */}
+      <div className="ov-cols">
+      <section className="ov-col">
       <h2>Trip details</h2>
       <div className="form-grid">
         <label>Name <input dir="auto" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -182,7 +186,9 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
         <textarea dir="auto" rows={3} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </label>
       <button className="primary" onClick={saveTrip}>Save trip</button>
+      </section>
 
+      <section className="ov-col">
       <h2>Legs (cities, in order)</h2>
       <div className="add-row leg-add-row">
         <div className="two-col">
@@ -260,6 +266,8 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
         Tip: the leg a place belongs to decides which day-range it can be scheduled in. Drag the ⠿ handle to
         reorder. A one-way or multi-city trip is just legs without a return — set the trip type above accordingly.
       </p>
+      </section>
+      </div>
     </div>
   );
 }

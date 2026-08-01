@@ -64,11 +64,11 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
         <button className="primary" onClick={add}>Add</button>
       </div>
 
-      {open.map(renderTodo)}
+      <div className="todo-list-wide">{open.map(renderTodo)}</div>
       {open.length === 0 && <p className="hint">Nothing left to do 🎉</p>}
 
       {done.length > 0 && <h3>Done</h3>}
-      {done.map(renderTodo)}
+      <div className="todo-list-wide">{done.map(renderTodo)}</div>
     </div>
   );
 }

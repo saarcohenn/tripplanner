@@ -117,25 +117,33 @@ body {
    Sits behind everything at low opacity. .main and .sidebar paint their own backgrounds
    over most of it, so what actually shows through is the gutter around the content — enough
    to give the desktop layout depth without ever competing with text. */
+/* Inset past the opaque sidebar so the left-hand grove isn't hidden behind it — the
+   backdrop covers the content area, which is what has gutters to spare. */
 .backdrop {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 240px;
+  z-index: 0; pointer-events: none; overflow: hidden;
   opacity: var(--backdrop-opacity);
 }
+/* Fixed to the pattern's own tile height so the tiling grid stays aligned to the bottom. */
 .backdrop-city {
-  position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: min(34vh, 260px);
+  position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 260px;
 }
-/* Right edge, not left — the left gutter is covered by the opaque sidebar, so bamboo
-   placed there would never be seen. */
+/* Over-sized and tilted ~5° off vertical (≈85°). The extra height covers the triangular
+   gaps the rotation would otherwise leave at the top and bottom edges. */
 .backdrop-bamboo {
-  position: absolute; right: 0; top: 0; bottom: 0; width: min(15vw, 200px);
+  position: absolute; top: -8%; height: 116%; width: min(15vw, 190px);
 }
+.backdrop-bamboo.left { left: 0; transform: rotate(-5deg); transform-origin: top left; }
+.backdrop-bamboo.right { right: 0; transform: rotate(5deg); transform-origin: top right; }
 .city-far rect, .city-far polygon { fill: var(--art-far); }
 .city-mid rect, .city-mid polygon { fill: var(--art-mid); }
 .city-near rect, .city-near polygon { fill: var(--art-near); }
-.bamboo-far rect, .bamboo-far ellipse { fill: var(--art-far); }
-.bamboo-near rect, .bamboo-near ellipse { fill: var(--art-mid); }
-.bamboo-node { fill: var(--art-near) !important; }
-.bamboo-leaf ellipse { fill: var(--art-leaf) !important; }
+/* Scoped to `pattern` descendants: the tiled <rect> that paints each layer carries
+   fill="url(#…)", and a bare `.backdrop-bamboo rect` rule would override that with a
+   flat colour and wipe out the pattern. */
+.backdrop-bamboo pattern rect { fill: var(--art-mid); }
+.backdrop-bamboo pattern .bamboo-node { fill: var(--art-near); }
+.backdrop-bamboo pattern .bamboo-leaf ellipse { fill: var(--art-leaf); }
 
 /* The app chrome has to sit above the artwork. */
 .sidebar, .main { position: relative; z-index: 1; }
@@ -908,6 +916,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 
   /* No gutter to show it in — the artwork would only sit behind text. */
   .backdrop { display: none; }
+  /* (left inset is desktop-only anyway, since the sidebar becomes a top bar here) */
 
   /* Sidebar becomes a slim top bar: hamburger + "trip › page" breadcrumb.
      Brand, new-trip and the trip switcher all live in the drawer. */
@@ -973,6 +982,39 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   input, select, textarea { font-size: 16px; }
   button { padding: 9px 14px; }
   button.small { padding: 6px 10px; }
+}
+
+/* ---------- wide screens ----------
+   Past ~1400px a single column just stretches every field across the viewport while the
+   page still scrolls. These rules spend the horizontal room instead, so more of each tab
+   is visible at once. Everything degrades to the single-column layout below the breakpoint. */
+.ov-cols { display: grid; grid-template-columns: 1fr; gap: 0 30px; }
+
+@media (min-width: 1400px) {
+  /* Overview: trip details beside the leg list. align-items:start keeps the shorter
+     column from stretching to match the taller one. */
+  .ov-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  /* The first heading in each column would otherwise inherit a big top margin and
+     misalign the two columns' tops. */
+  .ov-col > h2:first-child { margin-top: 6px; }
+
+  /* Stacked card lists become columns. `columns` (not grid) keeps each card's natural
+     height and simply flows the list into the available width. */
+  .todo-list-wide, .bcard-list-wide { columns: 2; column-gap: 20px; }
+  .todo-list-wide > *, .bcard-list-wide > * { break-inside: avoid; }
+
+  /* Expense/booking breakdown panels can sit wider before capping. */
+  .exp-breakdowns { max-width: 1400px; }
+  /* A textarea spanning 2000px is unreadable regardless of available room. */
+  textarea { max-width: 1100px; }
+  .narrow { max-width: 1000px; }
+}
+
+@media (min-width: 2000px) {
+  .todo-list-wide, .bcard-list-wide { columns: 3; }
+  /* Keep line length sane on very large displays — beyond this the layout stops gaining
+     from more width and just hurts readability. */
+  .main > .pad { max-width: 2100px; }
 }
 
 /* ---------- reduced motion ----------
