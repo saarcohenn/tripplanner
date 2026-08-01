@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 /**
  * A single control for picking a start/end date pair, replacing two native date inputs.
@@ -154,7 +155,7 @@ export default function DateRangePicker({
           <span className="drp-nights">{nights} {nights === 1 ? "night" : "nights"}</span>
         )}
         {(start || end) && (
-          <span className="drp-clear" role="button" aria-label="Clear dates" onClick={clear}>✕</span>
+          <span className="drp-clear" role="button" aria-label="Clear dates" onClick={clear}><X size={12} /></span>
         )}
       </button>
 
@@ -162,12 +163,12 @@ export default function DateRangePicker({
         <div className="drp-pop" role="dialog" aria-label="Choose dates">
           <div className="drp-head">
             <button type="button" className="drp-nav" aria-label="Previous month"
-              onClick={() => setViewMonth((m) => addMonths(m, -1))}>‹</button>
+              onClick={() => setViewMonth((m) => addMonths(m, -1))}><ChevronLeft size={16} /></button>
             <div className="drp-hint">
               {pendingStart ? "Now pick the end date" : "Pick the start date"}
             </div>
             <button type="button" className="drp-nav" aria-label="Next month"
-              onClick={() => setViewMonth((m) => addMonths(m, 1))}>›</button>
+              onClick={() => setViewMonth((m) => addMonths(m, 1))}><ChevronRight size={16} /></button>
           </div>
 
           <div className="drp-months" onMouseLeave={() => setHovered(null)}>

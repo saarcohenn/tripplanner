@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Settings, User } from "../types";
 
-const STATUS_LABEL: Record<string, string> = { pending: "⏳ Pending", approved: "✅ Approved", rejected: "🚫 Rejected" };
+const STATUS_LABEL: Record<string, string> = { pending: "⏳ Pending", approved: "Approved", rejected: "Rejected" };
 
 function AdminUsersPanel({ currentUser }: { currentUser: User }) {
   const [users, setUsers] = useState<User[]>([]);
@@ -112,7 +112,7 @@ export default function SettingsTab({ currentUser }: { currentUser: User }) {
         />
       </label>
       {settings?.google_maps_key_source === "env" && (
-        <p className="hint">✅ Currently using the key from the <code>GOOGLE_MAPS_API_KEY</code> environment variable (docker-compose). Saving a value here would override it; leave blank to keep using the env var.</p>
+        <p className="hint">Currently using the key from the <code>GOOGLE_MAPS_API_KEY</code> environment variable (docker-compose). Saving a value here would override it; leave blank to keep using the env var.</p>
       )}
       <button className="primary" onClick={save}>Save</button>
       {status && <p dir="auto">{status}</p>}

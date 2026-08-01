@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { api } from "../api";
 import type { Leg, Place, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
@@ -282,9 +283,9 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
                 <button
                   type="button" className="leg-drag-handle" aria-label="Drag to reorder"
                   onPointerDown={(e) => { e.preventDefault(); startDrag(l.id); }}
-                >⠿</button>
+                ><GripVertical size={15} /></button>
                 <button className="leg-summary" onClick={() => setExpanded(open ? null : l.id)}>
-                  <span className="leg-chev">{open ? "▾" : "▸"}</span>
+                  <span className="leg-chev">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
                   <span className="grow leg-summary-text" dir="auto">
                     <strong>{l.city || "New leg"}</strong>
                     {l.country && <span className="hint"> · {l.country}</span>}
@@ -321,7 +322,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
         {legs.length === 0 && <p className="hint">No legs yet — add your first city above.</p>}
       </div>
       <p className="hint">
-        Tip: the leg a place belongs to decides which day-range it can be scheduled in. Drag the ⠿ handle to
+        Tip: the leg a place belongs to decides which day-range it can be scheduled in. Drag the grip handle to
         reorder. A one-way or multi-city trip is just legs without a return — set the trip type above accordingly.
       </p>
       </section>

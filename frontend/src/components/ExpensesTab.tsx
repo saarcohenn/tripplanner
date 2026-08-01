@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import {
+  ChevronDown, ChevronRight, CreditCard, Globe, Hotel, Plane, ShoppingBag, Ticket,
+  TrainFront, UtensilsCrossed,
+} from "lucide-react";
 import { api } from "../api";
 import type { Expense, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
@@ -9,8 +13,9 @@ const CAT_COLORS: Record<string, string> = {
   flights: "#e86431", food: "#e8412f", transport: "#e88005", lodging: "#b4652e",
   activities: "#f0a41c", shopping: "#c93b6e", other: "#a5917c",
 };
-const CAT_ICON: Record<string, string> = {
-  flights: "✈️", food: "🍽️", transport: "🚆", lodging: "🏨", activities: "🎟️", shopping: "🛍️", other: "💳",
+const CAT_ICON: Record<string, typeof Plane> = {
+  flights: Plane, food: UtensilsCrossed, transport: TrainFront, lodging: Hotel,
+  activities: Ticket, shopping: ShoppingBag, other: CreditCard,
 };
 
 /** Booked items count toward the same categories as manual expenses. */
@@ -89,12 +94,12 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
 
   const byCity: Record<string, number> = {};
   for (const e of expenses) {
-    const city = (e.leg_id != null && legName.get(e.leg_id)) || "🌍 Trip-wide";
+    const city = (e.leg_id != null && legName.get(e.leg_id)) || "Trip-wide";
     byCity[city] = (byCity[city] || 0) + conv(e.amount, e.currency);
   }
   for (const b of bookings) {
     if (!b.cost) continue;
-    const city = (b.leg_id != null && legName.get(b.leg_id)) || "🌍 Trip-wide";
+    const city = (b.leg_id != null && legName.get(b.leg_id)) || "Trip-wide";
     byCity[city] = (byCity[city] || 0) + conv(b.cost, b.currency);
   }
 
@@ -175,7 +180,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
           </label>
           <label className="block">City
             <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
-              <option value="">🌍 Trip-wide</option>
+              <option value="">Trip-wide</option>
               {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
             </select>
           </label>
@@ -193,10 +198,10 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
           return (
             <div className="bcard" key={e.id}>
               <button className="bcard-head" onClick={() => setExpanded(open ? null : e.id)}>
-                <span className="bcard-chev">{open ? "▾" : "▸"}</span>
-                <span title={e.category}>{CAT_ICON[e.category] || "💳"}</span>
+                <span className="bcard-chev">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
+                {(() => { const CatIcon = CAT_ICON[e.category] || CreditCard; return <CatIcon size={14} aria-label={e.category} />; })()}
                 <span className="grow bcard-title" dir="auto">{e.title}</span>
-                <span className="hint" dir="auto">{(e.leg_id != null && legName.get(e.leg_id)) || "🌍"}</span>
+                <span className="hint icon-line" dir="auto">{(e.leg_id != null && legName.get(e.leg_id)) || <Globe size={12} />}</span>
                 <span className="bcard-cost nowrap">{fmtMoney(e.amount, e.currency)}</span>
               </button>
               {open && (
@@ -222,7 +227,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
                     </label>
                     <label className="block">City
                       <select value={e.leg_id ?? ""} onChange={(ev) => patch(e, { leg_id: ev.target.value === "" ? null : Number(ev.target.value) })}>
-                        <option value="">🌍 Trip-wide</option>
+                        <option value="">Trip-wide</option>
                         {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
                       </select>
                     </label>

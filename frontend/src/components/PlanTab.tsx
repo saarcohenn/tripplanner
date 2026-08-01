@@ -1,9 +1,13 @@
+import {
+  AlarmClock, BedDouble, CircleDot, Flame, Hotel, Luggage, MapPin, Plane, Sparkles,
+  Sunrise, TrainFront, TriangleAlert, UtensilsCrossed, Wallet,
+} from "lucide-react";
 import { api } from "../api";
 import type { AdvisorDoc, PlanDoc, PlanJob, TripDetail } from "../types";
 
-const KIND_ICON: Record<string, string> = {
-  visit: "📍", meal: "🍽️", transit: "🚆", rest: "😴", checkin: "🏨",
-  checkout: "🧳", flight: "✈️", other: "•",
+const KIND_ICON: Record<string, typeof MapPin> = {
+  visit: MapPin, meal: UtensilsCrossed, transit: TrainFront, rest: BedDouble,
+  checkin: Hotel, checkout: Luggage, flight: Plane, other: CircleDot,
 };
 
 export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdvise, planJob, busy }: {
@@ -55,29 +59,29 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
           <div className="day-card" key={d.date}>
             <div className="day-head">
               <strong>{d.date}</strong> · <span dir="auto">{d.city}</span>
-              {d.alarm_time && <span className={`alarm ${d.alarm_time < "07:30" ? "early" : ""}`} title={d.alarm_reason || ""}>🔔 alarm {d.alarm_time}</span>}
-              <span className={`wake ${d.wake_time < "07:30" ? "early" : ""}`}>⏰ wake {d.wake_time}</span>
+              {d.alarm_time && <span className={`alarm ${d.alarm_time < "07:30" ? "early" : ""}`} title={d.alarm_reason || ""}><AlarmClock size={12} /> alarm {d.alarm_time}</span>}
+              <span className={`wake ${d.wake_time < "07:30" ? "early" : ""}`}><AlarmClock size={12} /> wake {d.wake_time}</span>
             </div>
-            {d.alarm_reason && <div className="alarm-reason" dir="auto">🔔 {d.alarm_reason}</div>}
+            {d.alarm_reason && <div className="alarm-reason icon-line" dir="auto"><AlarmClock size={12} /> {d.alarm_reason}</div>}
             <div className="hint" dir="auto">{d.summary}</div>
             <ul className="items">
               {d.items?.map((it, i) => (
                 <li key={i} className={`item kind-${it.kind}`}>
                   <span className="time">{it.time}</span>
-                  <span className="icon">{KIND_ICON[it.kind] || "•"}</span>
+                  {(() => { const KindIcon = KIND_ICON[it.kind] || CircleDot; return <span className="icon"><KindIcon size={13} /></span>; })()}
                   <span dir="auto" className="grow">
                     {it.title}
                     {it.place_id != null && placeById.get(it.place_id)?.status === "dropped" && (
                       <em className="hint"> (dropped — regenerate)</em>
                     )}
                     {it.details && <div className="item-details" dir="auto">{it.details}</div>}
-                    {it.tip && <div className="item-tip" dir="auto" title="AI suggestion">✨ {it.tip}</div>}
+                    {it.tip && <div className="item-tip icon-line" dir="auto"><Sparkles size={11} className="ai-mark" /> {it.tip}</div>}
                   </span>
                   <span className="hint">{it.duration_min ? `${it.duration_min}m` : ""}</span>
                 </li>
               ))}
             </ul>
-            {d.warnings?.map((w, i) => <div className="alert small" key={i}>⚠ {w}</div>)}
+            {d.warnings?.map((w, i) => <div className="alert small icon-line" key={i}><TriangleAlert size={12} /> {w}</div>)}
           </div>
         ))}
         {planDoc.unscheduled_place_ids && planDoc.unscheduled_place_ids.length > 0 && (
@@ -89,7 +93,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
 
       <aside className="advisor">
         <div className="row spread">
-          <h2>✨ Advisor</h2>
+          <h2 className="icon-line"><Sparkles size={15} className="ai-mark" /> Advisor</h2>
           <button className="small" onClick={reAdvise} disabled={!llmReady || advising}>{advising ? "…" : "Re-analyze"}</button>
         </div>
         <p className="hint">The advisor never suggests new places — it only tells you what to drop, when to rest, and when you'll have to get up early.</p>
@@ -102,7 +106,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
                 <h3>Pacing</h3>
                 {advisor.pacing_alerts.map((a, i) => (
                   <div key={i} className={`alert type-${a.type}`}>
-                    <strong>{a.date}</strong> {icon(a.type)} <span dir="auto">{a.message}</span>
+                    <strong>{a.date}</strong> <AdvisorIcon type={a.type} /> <span dir="auto">{a.message}</span>
                   </div>
                 ))}
               </>
@@ -135,8 +139,12 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
   );
 }
 
-function icon(type: string) {
-  return { overload: "🔥", early_wake: "🌅", rest_needed: "😴", transit_heavy: "🚆", budget: "💸" }[type] || "⚠";
+function AdvisorIcon({ type }: { type: string }) {
+  const Icon = ({
+    overload: Flame, early_wake: Sunrise, rest_needed: BedDouble,
+    transit_heavy: TrainFront, budget: Wallet,
+  } as Record<string, typeof Flame>)[type] || TriangleAlert;
+  return <Icon size={13} />;
 }
 
 function safeParse<T>(s: string): T | null {

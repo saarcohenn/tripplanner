@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
+import {
+  Bus, Car, ChevronDown, ChevronRight, Globe, Hotel, Pin, Plane, Ship, Sparkles,
+  Ticket, TrainFront,
+} from "lucide-react";
 import { api } from "../api";
 import type { Booking, Leg, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
 import { fmtMoney } from "../currencies";
 
 const KINDS = ["flight", "stay", "train", "bus", "ferry", "car", "activity", "other"];
-const KIND_ICON: Record<string, string> = {
-  flight: "✈️", stay: "🏨", train: "🚆", bus: "🚌", ferry: "⛴️", car: "🚗", activity: "🎟️", other: "📌",
+const KIND_ICON: Record<string, typeof Plane> = {
+  flight: Plane, stay: Hotel, train: TrainFront, bus: Bus, ferry: Ship, car: Car,
+  activity: Ticket, other: Pin,
 };
 
 function bookingUrl(leg: Leg) {
@@ -101,7 +106,7 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
         <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
         <input dir="auto" placeholder="Title (e.g. TLV→ICN Korean Air)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
-          <option value="">🌍 Trip-wide</option>
+          <option value="">Trip-wide</option>
           {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
         </select>
         <input type="date" title="Date / check-in" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -117,13 +122,13 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
         return (
           <div className="bcard" key={b.id}>
             <button className="bcard-head" onClick={() => setExpanded(open ? null : b.id)}>
-              <span className="bcard-chev">{open ? "▾" : "▸"}</span>
-              <span title={b.kind}>{KIND_ICON[b.kind] || "📌"}</span>
+              <span className="bcard-chev">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
+              {(() => { const KindIcon = KIND_ICON[b.kind] || Pin; return <KindIcon size={14} aria-label={b.kind} />; })()}
               <span className="grow bcard-title" dir="auto">
-                {b.source === "ai" && <span title="Extracted by AI from your conversation">✨ </span>}
+                {b.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />}{" "}
                 {b.title}
               </span>
-              <span className="hint" dir="auto">{(b.leg_id != null && legName.get(b.leg_id)) || "🌍"}</span>
+              <span className="hint icon-line" dir="auto">{(b.leg_id != null && legName.get(b.leg_id)) || <Globe size={12} />}</span>
               <span className="bcard-cost nowrap">{b.cost != null ? `${b.cost} ${b.currency}` : ""}</span>
             </button>
             {open && (
@@ -139,12 +144,12 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
                   </label>
                   <label className="block">City
                     <select value={b.leg_id ?? ""} onChange={(e) => patch(b, { leg_id: e.target.value === "" ? null : Number(e.target.value) })}>
-                      <option value="">🌍 Trip-wide</option>
+                      <option value="">Trip-wide</option>
                       {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
                     </select>
                   </label>
                 </div>
-                <label className="block">Comment {b.source === "ai" && <span title="Extracted by AI — double-check it">✨</span>}
+                <label className="block icon-line">Comment {b.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI, double-check it" />}
                   <input dir="auto" placeholder="Notes about this booking…" defaultValue={b.notes}
                     onBlur={(e) => e.target.value !== b.notes && patch(b, { notes: e.target.value })} />
                 </label>
@@ -185,7 +190,7 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
         );
       })}
       {bookings.length === 0 && <p className="hint">No bookings recorded yet.</p>}
-      {bookings.length > 0 && <p className="hint">Click a row to expand and edit. ✨ marks AI-extracted entries.</p>}
+      {bookings.length > 0 && <p className="hint icon-line">Click a row to expand and edit. <Sparkles size={11} className="ai-mark" /> marks AI-extracted entries.</p>}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PartyPopper, Sparkles, X } from "lucide-react";
 import { api } from "../api";
 import type { Todo, TripDetail } from "../types";
 
@@ -35,7 +36,7 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
     return (
       <div className={`todo${t.done ? " done" : ""}`} key={t.id}>
         <input type="checkbox" checked={!!t.done} onChange={() => patch(t, { done: t.done ? 0 : 1 })} />
-        {t.source === "ai" && <span title="Extracted by AI from your conversation">✨</span>}
+        {t.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />}
         <input
           dir="auto" className="subtle grow" defaultValue={t.text}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
@@ -48,7 +49,7 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
           type="date" className="subtle nowrap" defaultValue={t.due_date ?? ""}
           onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
         />
-        <button className="danger small" onClick={() => remove(t)}>✕</button>
+        <button className="danger small" onClick={() => remove(t)} aria-label="Delete todo"><X size={13} /></button>
       </div>
     );
   }
@@ -65,7 +66,7 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
       </div>
 
       <div className="todo-list-wide">{open.map(renderTodo)}</div>
-      {open.length === 0 && <p className="hint">Nothing left to do 🎉</p>}
+      {open.length === 0 && <p className="hint icon-line"><PartyPopper size={13} /> Nothing left to do</p>}
 
       {done.length > 0 && <h3>Done</h3>}
       <div className="todo-list-wide">{done.map(renderTodo)}</div>

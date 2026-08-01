@@ -25,7 +25,7 @@ export default function SetupAdminForm({ onDone }: { onDone: (user: User) => voi
 
   return (
     <div className="pad narrow auth-screen">
-      <h1>🧭 TripPlanner</h1>
+      <h1>TripPlanner</h1>
       <h2>Create the admin account</h2>
       <p className="hint">
         This is a one-time setup — the first account on this server becomes the admin. Once

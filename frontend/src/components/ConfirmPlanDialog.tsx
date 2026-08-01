@@ -13,7 +13,7 @@ export default function ConfirmPlanDialog({ open, llmReady, onChoose }: {
   return (
     <div className="modal-overlay" onClick={() => onChoose("cancel")}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>⚠ This trip is already planned</h3>
+        <h3>This trip is already planned</h3>
         <p>
           Adding a place will mark the current daily plan as outdated, and the plan may
           change when it is regenerated.

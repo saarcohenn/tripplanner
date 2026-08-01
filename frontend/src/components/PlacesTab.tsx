@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Camera, Download, Globe, ImageOff, Map as MapIcon, Sparkles, Upload, X } from "lucide-react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
@@ -310,7 +311,9 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
           )}
         </h2>
         <div className="row" style={{ gap: 8 }}>
-          {fetchingPhotos && <span className="hint">📷 Fetching photos…</span>}
+          {fetchingPhotos && (
+            <span className="hint icon-line"><Camera size={13} /> Fetching photos…</span>
+          )}
           <button
             className={`icon-btn${filtersOpen ? " active" : ""}`} title="Filter places"
             onClick={() => setFiltersOpen((v) => !v)}
@@ -325,7 +328,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
         <div className="filter-bar">
           <div className="filter-search" ref={searchWrapRef}>
             <input
-              dir="auto" placeholder="🔍 Search places…" value={nameFilter}
+              dir="auto" placeholder="Search places…" value={nameFilter}
               onChange={(e) => { setNameFilter(e.target.value); setShowSuggestions(true); setHighlightIdx(-1); }}
               onFocus={() => setShowSuggestions(true)}
               onKeyDown={(e) => {
@@ -361,17 +364,23 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                 <button key={l.id} dir="auto" className={`chip-toggle${cityFilter.has(l.id) ? " active" : ""}`} onClick={() => toggleCity(l.id)}>{l.city}</button>
               ))}
               {byLeg.has(null) && (
-                <button className={`chip-toggle${cityFilter.has(null) ? " active" : ""}`} onClick={() => toggleCity(null)}>🌍 Unassigned</button>
+                <button className={`chip-toggle${cityFilter.has(null) ? " active" : ""}`} onClick={() => toggleCity(null)}>
+                  <Globe size={12} /> Unassigned
+                </button>
               )}
             </div>
           )}
-          {anyFilterActive && <button className="small" onClick={clearFilters}>Clear filters ✕</button>}
+          {anyFilterActive && (
+            <button className="small btn-icon" onClick={clearFilters}>Clear filters <X size={12} /></button>
+          )}
         </div>
       )}
 
       <div className="row" style={{ gap: 8 }}>
         <button className="primary" onClick={() => setAddOpen((v) => !v)}>{addOpen ? "− Close" : "+ Add place"}</button>
-        <button onClick={() => setImportOpen((v) => !v)}>{importOpen ? "− Close" : "⤓ Import from Google Maps"}</button>
+        <button className="btn-icon" onClick={() => setImportOpen((v) => !v)}>
+          {importOpen ? "− Close" : <><Download size={14} /> Import from Google Maps</>}
+        </button>
       </div>
 
       {importOpen && (
@@ -386,7 +395,9 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
               ref={importFileRef} type="file" accept=".json,application/json" style={{ display: "none" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ""; }}
             />
-            <button className="primary" onClick={() => importFileRef.current?.click()}>⬆ Choose file</button>
+            <button className="primary btn-icon" onClick={() => importFileRef.current?.click()}>
+              <Upload size={14} /> Choose file
+            </button>
             {importFileName && <span className="hint" dir="auto">{importFileName}</span>}
           </div>
           {importBusy && <p className="hint">Reading file…</p>}
@@ -450,7 +461,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                 ))}
               </ul>
             )}
-            {picked && <p className="hint">📍 Location matched — will be pinned on the map too.</p>}
+            {picked && <p className="hint">Location matched — will be pinned on the map too.</p>}
           </div>
           <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
             <option value="">No city</option>
@@ -488,17 +499,19 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
               >
                 {p.photo_ref
                   ? <img className="pcard-img" src={`/api/places/${p.id}/photo`} alt={p.name} loading="lazy" />
-                  : <div className="pcard-img empty">🏞️</div>}
+                  : <div className="pcard-img empty"><ImageOff size={34} strokeWidth={1.4} /></div>}
                 <span className="pcard-cat" style={{ background: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other }} />
                 <div className="pcard-body">
                   <div className="row spread">
                     <strong dir="auto">{p.name}</strong>
                     <a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps"
-                      onClick={(e) => e.stopPropagation()}>🗺️</a>
+                      onClick={(e) => e.stopPropagation()}><MapIcon size={15} /></a>
                   </div>
                   {p.notes && (
                     <div className="hint" dir="auto">
-                      {p.source === "ai" && <span title="Extracted by AI from your conversation">✨ </span>}
+                      {p.source === "ai" && (
+                        <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />
+                      )}{" "}
                       {p.notes}
                     </div>
                   )}

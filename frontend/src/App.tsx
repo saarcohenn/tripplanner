@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft, Bell, Compass, Hourglass, Menu, Moon, Plus, Sun, TriangleAlert, X,
+} from "lucide-react";
 import { api } from "./api";
 import type { AppConfig, Notification, PlanJob, Trip, TripDetail, User } from "./types";
 import OverviewTab from "./components/OverviewTab";
@@ -255,7 +258,9 @@ export default function App() {
     <div className="app">
       <Backdrop />
       <aside className="sidebar">
-        <button className="hamburger" aria-label="Open menu" onClick={() => setMenuOpen(true)}>☰</button>
+        <button className="hamburger" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+          <Menu size={18} />
+        </button>
         {/* Mobile top bar shows where you are (trip › page); the brand lives in the drawer */}
         <div className="crumb" dir="auto">
           {detail && !APP_TABS.includes(tab)
@@ -267,10 +272,11 @@ export default function App() {
           className="theme-toggle" onClick={toggleTheme}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        >{theme === "dark" ? "☀" : "☾"}</button>
+        >{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</button>
         <div className="notif-wrap" ref={notifRef}>
           <button className="notif-bell" aria-label="Notifications" onClick={toggleNotifications}>
-            🔔
+            {/* .ringing swings the bell while anything is unread (see styles.css) */}
+            <Bell size={16} className={unreadCount > 0 ? "ringing" : ""} />
             {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
           </button>
           {notifOpen && (
@@ -292,8 +298,8 @@ export default function App() {
           )}
         </div>
         </div>
-        <h1>🧭 TripPlanner</h1>
-        <button className="primary" onClick={createTrip}>+ New trip</button>
+        <h1><Compass size={18} className="brand-mark" /> TripPlanner</h1>
+        <button className="primary btn-icon" onClick={createTrip}><Plus size={15} /> New trip</button>
         <ul className="trip-list">
           {trips.map((t) => (
             <li key={t.id} className={t.id === selectedId ? "active" : ""}>
@@ -310,7 +316,7 @@ export default function App() {
                 )}
               </button>
               <button className="trip-del" title="Delete trip" aria-label={`Delete ${t.name}`}
-                onClick={() => deleteTrip(t.id)}>✕</button>
+                onClick={() => deleteTrip(t.id)}><X size={14} /></button>
             </li>
           ))}
         </ul>
@@ -320,7 +326,11 @@ export default function App() {
               <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>{t}</button>
             ))}
           </nav>
-          {!llmReady && <p className="hint">⚠ No LLM key set — plan generation disabled. Add one in Profile.</p>}
+          {!llmReady && (
+            <p className="hint icon-line">
+              <TriangleAlert size={13} /> No LLM key set — plan generation disabled. Add one in Profile.
+            </p>
+          )}
           <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email}</p>
         </div>
       </aside>
@@ -329,8 +339,10 @@ export default function App() {
         <div className="drawer-overlay" onClick={() => setMenuOpen(false)}>
           <nav className="drawer" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-head">
-              <button className="drawer-back" aria-label="Close menu" onClick={() => setMenuOpen(false)}>←</button>
-              <h1>🧭 TripPlanner</h1>
+              <button className="drawer-back" aria-label="Close menu" onClick={() => setMenuOpen(false)}>
+                <ArrowLeft size={17} />
+              </button>
+              <h1><Compass size={18} className="brand-mark" /> TripPlanner</h1>
             </div>
             <h4>Pages</h4>
             {TRIP_TABS.map((t) => (
@@ -354,10 +366,12 @@ export default function App() {
                   )}
                 </button>
                 <button className="trip-del" title="Delete trip" aria-label={`Delete ${t.name}`}
-                  onClick={() => deleteTrip(t.id)}>✕</button>
+                  onClick={() => deleteTrip(t.id)}><X size={14} /></button>
               </div>
             ))}
-            <button className="drawer-item" onClick={() => { setMenuOpen(false); void createTrip(); }}>＋ New trip</button>
+            <button className="drawer-item" onClick={() => { setMenuOpen(false); void createTrip(); }}>
+              <Plus size={16} /> New trip
+            </button>
             <div className="drawer-app">
               <h4>App</h4>
               {APP_TABS.map((t) => (
@@ -376,8 +390,16 @@ export default function App() {
           ))}
         </nav>
 
-        {error && <div className="banner error" onClick={() => setError(null)}>{error} ✕</div>}
-        {busy && <div className="banner busy">⏳ {busy}</div>}
+        {error && (
+          <div className="banner error icon-line" onClick={() => setError(null)}>
+            <TriangleAlert size={14} /> <span className="grow">{error}</span> <X size={14} />
+          </div>
+        )}
+        {busy && (
+          <div className="banner busy icon-line">
+            <Hourglass size={14} className="spin-slow" /> {busy}
+          </div>
+        )}
         {planOutdated && !busy && detail && !APP_TABS.includes(tab) && (
           <div className="banner warn">
             Plan is out of date with your latest changes.

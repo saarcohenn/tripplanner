@@ -213,7 +213,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
       }
       if (r.models.length === 0) setStatus("Provider returned no models for this key.");
     } catch (e: any) {
-      setStatus(`❌ ${e.message}`);
+      setStatus(`${e.message}`);
     } finally {
       setLoadingModels(false);
     }
@@ -242,9 +242,9 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
       // Test what's on screen, not what was saved earlier.
       await save();
       const r = await api.post<{ ok: boolean; model: string; reply: string }>("/settings/test");
-      setStatus(`✅ Connected — ${r.model} replied "${r.reply}"`);
+      setStatus(`Connected — ${r.model} replied "${r.reply}"`);
     } catch (e: any) {
-      setStatus(`❌ ${e.message}`);
+      setStatus(`${e.message}`);
     } finally {
       setTesting(false);
     }
@@ -288,7 +288,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
       </label>
       <div className="row">
         <button className="small" onClick={loadModels} disabled={loadingModels}>
-          {loadingModels ? "Loading…" : "↻ Load model list"}
+          {loadingModels ? "Loading…" : "Load model list"}
         </button>
         {modelList.length > 0 && (
           <button className="small" onClick={() => setManualModel(!manualModel)}>

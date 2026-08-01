@@ -8,6 +8,10 @@ import {
   APIProvider, Map as GMap, Marker, InfoWindow, Polyline, MapControl,
   ControlPosition, ColorScheme, useMap,
 } from "@vis.gl/react-google-maps";
+import {
+  ExternalLink, FerrisWheel, LocateFixed, MapPin, Plane, Settings, ShoppingBag,
+  TrainFront, TriangleAlert, UtensilsCrossed,
+} from "lucide-react";
 import { api, gmapsLink, parseGmapsUrl } from "../api";
 import type { Leg, Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
@@ -36,12 +40,14 @@ const MAP_TYPES: { id: MapTypeId; label: string }[] = [
  * billing and no markers of our own competing with the trip's places.
  */
 type PoiKey = "attractions" | "shopping" | "food" | "rail" | "airport";
-const POI_LAYERS: { key: PoiKey; label: string; icon: string; features: string[] }[] = [
-  { key: "attractions", label: "Attractions", icon: "🎡", features: ["poi.attraction", "poi.park", "poi.place_of_worship"] },
-  { key: "shopping", label: "Shopping", icon: "🛍", features: ["poi.business"] },
-  { key: "food", label: "Food", icon: "🍜", features: ["poi.business"] },
-  { key: "rail", label: "Trains", icon: "🚉", features: ["transit.station.rail", "transit.line"] },
-  { key: "airport", label: "Airports", icon: "✈", features: ["transit.station.airport"] },
+const POI_LAYERS: {
+  key: PoiKey; label: string; Icon: typeof FerrisWheel; features: string[];
+}[] = [
+  { key: "attractions", label: "Attractions", Icon: FerrisWheel, features: ["poi.attraction", "poi.park", "poi.place_of_worship"] },
+  { key: "shopping", label: "Shopping", Icon: ShoppingBag, features: ["poi.business"] },
+  { key: "food", label: "Food", Icon: UtensilsCrossed, features: ["poi.business"] },
+  { key: "rail", label: "Trains", Icon: TrainFront, features: ["transit.station.rail", "transit.line"] },
+  { key: "airport", label: "Airports", Icon: Plane, features: ["transit.station.airport"] },
 ];
 
 function markerScale(p: Place, selected: boolean): number {
@@ -353,7 +359,7 @@ export default function TripMap({
                 title={`Show ${l.label.toLowerCase()} on the map`}
                 onClick={() => setPoi((p) => ({ ...p, [l.key]: !p[l.key] }))}
               >
-                <span aria-hidden="true">{l.icon}</span> {l.label}
+                <l.Icon size={13} /> {l.label}
               </button>
             ))}
           </div>
@@ -366,7 +372,7 @@ export default function TripMap({
               setPending({ lat: r.lat, lng: r.lng, name: r.name, google_place_id: r.google_place_id, photo_ref: r.photo_ref });
               setResults([]);
             }}>
-            📍 <strong>{r.name}</strong>
+            <MapPin size={13} /> <strong>{r.name}</strong>
             <span className="hint"> {r.address}</span>
           </button>
         ))}
@@ -385,8 +391,8 @@ export default function TripMap({
           </div>
         )}
         {gmapsKey && googleFailed && (
-          <div className="alert">
-            ⚠ Google rejected the Maps key, showing the OpenStreetMap fallback instead. Open the browser
+          <div className="alert icon-line">
+            <TriangleAlert size={14} /> Google rejected the Maps key, showing the OpenStreetMap fallback instead. Open the browser
             console (F12) for the exact reason — usually "Maps JavaScript API" isn't enabled on the key's
             Google Cloud project, or billing/referrer restrictions block it.
           </div>
@@ -441,12 +447,12 @@ export default function TripMap({
                   <button
                     className="map-tool-btn" title="Show my location" aria-label="Show my location"
                     onClick={locate} disabled={locating}
-                  >{locating ? "…" : "◎"}</button>
+                  ><LocateFixed size={16} className={locating ? "pulse" : ""} /></button>
                   <button
                     className={`map-tool-btn${settingsOpen ? " active" : ""}`}
                     title="Map settings" aria-label="Map settings" aria-expanded={settingsOpen}
                     onClick={() => setSettingsOpen((v) => !v)}
-                  >⚙</button>
+                  ><Settings size={16} /></button>
                 </div>
               </MapControl>
 
@@ -605,10 +611,10 @@ export default function TripMap({
               <span className="hint">Show route</span>
             </label>
           )}
-          {/* The Google build gets this from the ◎ control on the map itself. */}
+          {/* The Google build gets this from the locate control on the map itself. */}
           {!useGoogle && (
-            <button className="small" onClick={locate} disabled={locating}>
-              {locating ? "Locating…" : "◎ My location"}
+            <button className="small btn-icon" onClick={locate} disabled={locating}>
+              <LocateFixed size={13} /> {locating ? "Locating…" : "My location"}
             </button>
           )}
           <span className="hint">Click the map to pin a new place.</span>
@@ -631,9 +637,13 @@ function PlaceCard({ p, city, onJump }: { p: Place; city: string | null; onJump?
         {p.notes && <div className="place-card-notes" dir="auto">{p.notes}</div>}
         <div className="place-card-actions">
           {onJump && (
-            <button className="place-card-jump" onClick={onJump}>◎ Jump to location</button>
+            <button className="place-card-jump btn-icon" onClick={onJump}>
+              <LocateFixed size={12} /> Jump to location
+            </button>
           )}
-          <a href={gmapsLink(p)} target="_blank" rel="noreferrer">Open in Google Maps ↗</a>
+          <a className="icon-line" href={gmapsLink(p)} target="_blank" rel="noreferrer">
+            Open in Google Maps <ExternalLink size={11} />
+          </a>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { api } from "../api";
 import type { Room, RoomMember, Trip, User } from "../types";
 
@@ -102,7 +103,7 @@ function RoomCard({ room, currentUser, trips, reloadTrips }: {
   return (
     <div className="bcard">
       <button className="bcard-head" onClick={() => setOpen((v) => !v)}>
-        <span className="bcard-chev">{open ? "▾" : "▸"}</span>
+        <span className="bcard-chev">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
         <span className="grow bcard-title" dir="auto">{room.name}</span>
       </button>
       {open && (

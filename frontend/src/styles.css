@@ -1005,6 +1005,36 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   button.small { padding: 6px 10px; }
 }
 
+/* ---------- icons ----------
+   Outlined (lucide) icons throughout. They're inline SVGs inheriting currentColor, so they
+   pick up whatever colour their container already has in either theme. */
+svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
+/* Buttons and inline text that mix an icon with a label need the two baseline-aligned. */
+.btn-icon, .icon-line { display: inline-flex; align-items: center; gap: 6px; }
+.banner.icon-line, p.icon-line, h2.icon-line { display: flex; }
+.sidebar h1 { display: flex; align-items: center; gap: 7px; }
+.brand-mark { color: var(--accent); }
+.ai-mark { color: var(--accent); vertical-align: -0.1em; }
+.drawer-item { gap: 8px; }
+.bcard-head, .leg-summary { gap: 9px; }
+/* Chevrons rotate rather than swapping glyphs, so expanding a card animates. */
+.bcard-chev, .leg-chev { display: inline-flex; transition: transform 0.2s var(--ease); }
+
+@keyframes bell-swing {
+  0%, 60%, 100% { transform: rotate(0); }
+  10% { transform: rotate(14deg); }
+  20% { transform: rotate(-11deg); }
+  30% { transform: rotate(8deg); }
+  40% { transform: rotate(-5deg); }
+  50% { transform: rotate(2deg); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes soft-pulse { 50% { opacity: 0.35; } }
+/* Only rings while something is actually unread — a permanently animating bell is noise. */
+.ringing { transform-origin: 50% 12%; animation: bell-swing 2.6s var(--ease) infinite; }
+.spin-slow { animation: spin 1.6s linear infinite; }
+.pulse { animation: soft-pulse 1s var(--ease) infinite; }
+
 /* ---------- date range picker ---------- */
 /* The range field carries two dates plus a nights badge, so it needs more room than a
    single form-grid cell gives it. */
@@ -1113,4 +1143,7 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   }
   .pcard:hover, .todo:hover, button:hover:not(:disabled) { transform: none !important; }
   .pcard:hover .pcard-img { transform: none !important; }
+  /* The bell, spinner and locate pulse are decorative — stop them outright rather than
+     letting the blanket 0.01ms rule spin them imperceptibly fast. */
+  .ringing, .spin-slow, .pulse { animation: none !important; }
 }
