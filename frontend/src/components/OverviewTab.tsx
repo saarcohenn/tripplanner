@@ -15,6 +15,66 @@ function fmtRange(a: string | null, b: string | null): string {
   return `${fmtDate(a)} → ${fmtDate(b)}`;
 }
 
+/** Whole days from local midnight today to local midnight on `iso` (negative once past). */
+function daysUntil(iso: string): number {
+  const target = new Date(`${iso}T00:00:00`);
+  if (isNaN(target.getTime())) return NaN;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+/**
+ * Countdown to (or through) the trip. Deliberately date-only rather than a ticking
+ * hh:mm:ss — a trip is planned in days, and a live clock would re-render every second
+ * for no real information.
+ */
+function Countdown({ start, end }: { start: string | null; end: string | null }) {
+  if (!start) return null;
+  const toStart = daysUntil(start);
+  if (isNaN(toStart)) return null;
+  const toEnd = end ? daysUntil(end) : NaN;
+  const totalDays = !isNaN(toEnd) ? toEnd - toStart + 1 : NaN;
+
+  let state: "upcoming" | "today" | "during" | "past";
+  let big: string;
+  let label: string;
+
+  if (toStart > 0) {
+    state = "upcoming";
+    big = String(toStart);
+    label = toStart === 1 ? "day to go" : "days to go";
+  } else if (toStart === 0) {
+    state = "today";
+    big = "Today";
+    label = "your trip starts";
+  } else if (!isNaN(toEnd) && toEnd >= 0) {
+    state = "during";
+    const dayNo = -toStart + 1;
+    big = `Day ${dayNo}`;
+    label = !isNaN(totalDays) ? `of ${totalDays}` : "in progress";
+  } else {
+    state = "past";
+    const since = !isNaN(toEnd) ? -toEnd : -toStart;
+    big = String(since);
+    label = since === 1 ? "day since you got back" : "days since you got back";
+  }
+
+  return (
+    <div className={`countdown ${state}`}>
+      <div className="countdown-num">{big}</div>
+      <div className="countdown-label">
+        {label}
+        <span className="countdown-dates">
+          {fmtDate(start)}{end ? ` → ${fmtDate(end)}` : ""}
+          {state === "upcoming" && !isNaN(totalDays) && ` · ${totalDays} days`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function OverviewTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
   const { trip, legs } = detail;
   const [form, setForm] = useState({ ...trip });
@@ -100,6 +160,8 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
 
   return (
     <div className="pad">
+      {/* Driven by the form (not the saved trip) so it re-counts live as you pick dates. */}
+      <Countdown start={form.start_date} end={form.end_date} />
       <h2>Trip details</h2>
       <div className="form-grid">
         <label>Name <input dir="auto" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>

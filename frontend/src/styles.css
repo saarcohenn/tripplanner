@@ -41,6 +41,11 @@
   --banner-error-bg: #fdecea; --banner-error-fg: #a1160a; --banner-error-bd: #f5c1ba;
   --banner-warn-bg: #fdf3e2;  --banner-warn-fg: #8a5200;  --banner-warn-bd: #f2ddb8;
   --banner-busy-bg: #fdeedd;  --banner-busy-fg: #995805;  --banner-busy-bd: #f4d6b0;
+
+  /* Backdrop artwork: three depth layers + leaves. Opacity is tuned per theme so the
+     rendered result lands a few shades off --bg rather than reading as a picture. */
+  --art-far: #d9c7ae; --art-mid: #c9b191; --art-near: #b89a73; --art-leaf: #8aa016;
+  --backdrop-opacity: 0.24;
 }
 
 /* Deep-night theme — cool navy surfaces with a violet cast, brand orange kept as the accent
@@ -83,11 +88,20 @@
   --banner-error-bg: #341a1c; --banner-error-fg: #ffb0a6; --banner-error-bd: #5c2a2a;
   --banner-warn-bg: #33260f;  --banner-warn-fg: #ffcf94;  --banner-warn-bd: #5a4320;
   --banner-busy-bg: #24243f;  --banner-busy-fg: #c3c0f5;  --banner-busy-bd: #3d3c66;
+
+  /* Cool blues with a violet cast picked up from the skyline, teal bamboo. */
+  --art-far: #1d2f57; --art-mid: #2b4a78; --art-near: #3d3a72; --art-leaf: #2f7a63;
+  --backdrop-opacity: 0.5;
 }
 
 /* Native widgets (scrollbars, date pickers, form controls) follow this instead of guessing. */
 :root[data-theme="dark"] { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* decelerate — entrances, expansions */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);        /* symmetric — hovers, colour changes */
+}
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -97,7 +111,34 @@ body {
   font: 14px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
-.app { display: flex; height: 100vh; }
+.app { display: flex; height: 100vh; position: relative; }
+
+/* ---------- ambient backdrop (desktop only) ----------
+   Sits behind everything at low opacity. .main and .sidebar paint their own backgrounds
+   over most of it, so what actually shows through is the gutter around the content — enough
+   to give the desktop layout depth without ever competing with text. */
+.backdrop {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  opacity: var(--backdrop-opacity);
+}
+.backdrop-city {
+  position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: min(34vh, 260px);
+}
+/* Right edge, not left — the left gutter is covered by the opaque sidebar, so bamboo
+   placed there would never be seen. */
+.backdrop-bamboo {
+  position: absolute; right: 0; top: 0; bottom: 0; width: min(15vw, 200px);
+}
+.city-far rect, .city-far polygon { fill: var(--art-far); }
+.city-mid rect, .city-mid polygon { fill: var(--art-mid); }
+.city-near rect, .city-near polygon { fill: var(--art-near); }
+.bamboo-far rect, .bamboo-far ellipse { fill: var(--art-far); }
+.bamboo-near rect, .bamboo-near ellipse { fill: var(--art-mid); }
+.bamboo-node { fill: var(--art-near) !important; }
+.bamboo-leaf ellipse { fill: var(--art-leaf) !important; }
+
+/* The app chrome has to sit above the artwork. */
+.sidebar, .main { position: relative; z-index: 1; }
 
 /* ---------- sidebar ---------- */
 .sidebar {
@@ -129,6 +170,7 @@ body {
   position: absolute; top: 34px; left: 0; width: min(300px, calc(100vw - 24px));
   max-height: 340px; overflow-y: auto; background: var(--card); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: var(--shadow-lg); z-index: 30; padding: 4px 0;
+  animation: pop 0.2s var(--ease-out) both;
 }
 .notif-panel-head { font-weight: 600; font-size: 13px; padding: 8px 12px 4px; }
 .notif-list { list-style: none; margin: 0; padding: 0; }
@@ -136,7 +178,11 @@ body {
 .notif-list li.unread { background: var(--accent-tint); }
 .sidebar h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.3px; }
 .trip-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
-.trip-list li { display: flex; align-items: center; gap: 4px; border-radius: 10px; padding: 2px; margin: 2px 0; }
+.trip-list li {
+  display: flex; align-items: center; gap: 4px; border-radius: 10px; padding: 2px; margin: 2px 0;
+  transition: background 0.2s var(--ease);
+  animation: rise 0.26s var(--ease-out) both;
+}
 .trip-list li.active { background: var(--accent-tint); }
 .trip-list li.active .trip-name { color: var(--accent-dark); font-weight: 600; }
 .trip-name {
@@ -182,7 +228,9 @@ body {
 .sidebar-app-nav button {
   text-align: left; background: none; border: none; color: var(--muted);
   padding: 6px 8px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
+.sidebar-app-nav button:hover:not(:disabled) { transform: none; box-shadow: none; }
 .sidebar-app-nav button:hover { background: var(--card-tint); color: var(--text); }
 .sidebar-app-nav button.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
 
@@ -198,6 +246,10 @@ body {
   background: var(--stage-planned);
   box-shadow: 0 0 0 2px var(--stage-planned-ring), 0 0 9px var(--stage-planned);
 }
+/* Only the selected trip's dot pulses — every row breathing at once would be noise. */
+.trip-list li.active .stage-dot.planned, .drawer-item.active .stage-dot.planned {
+  animation: pulse-ring 2.4s var(--ease) infinite;
+}
 
 /* ---------- main frame + tabs ---------- */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -205,6 +257,7 @@ body {
 .tab {
   background: none; border: none; color: var(--muted); padding: 8px 15px;
   cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 999px;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 .tab:hover { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .tab.active { background: var(--accent); color: var(--on-accent); box-shadow: var(--accent-glow); }
@@ -216,10 +269,72 @@ body {
 .auth-screen { max-width: 380px; margin: 10vh auto 0; }
 .auth-screen h1 { text-align: center; }
 
+/* ---------- motion ----------
+   One shared vocabulary: --ease for anything interactive, entrance keyframes for content
+   that appears. Everything here collapses to nothing under prefers-reduced-motion (bottom
+   of file), so no animation is load-bearing for comprehension. */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes sheen {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 2px var(--stage-planned-ring), 0 0 0 0 var(--stage-planned-ring); }
+  70% { box-shadow: 0 0 0 2px var(--stage-planned-ring), 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 2px var(--stage-planned-ring), 0 0 0 0 transparent; }
+}
+
+/* Tab content animates in on every switch. No wrapper element is needed: switching tabs
+   unmounts one tab component and mounts another, so the new root is a fresh DOM node and
+   its animation runs again. (A wrapper would also nest a second scroll container inside
+   .main and break the map/plan flex layouts.) Ends on transform:none, so it leaves behind
+   no containing block that would trap the map's positioned overlays. */
+.main > .pad, .main > .plan-layout { animation: rise 0.26s var(--ease-out) both; }
+
+/* ---------- countdown ---------- */
+.countdown {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); padding: 16px 22px; margin: 4px 0 6px;
+  position: relative; overflow: hidden;
+  animation: pop 0.4s var(--ease-out) both;
+}
+/* Warm wash from the leading edge, tinted by trip state. */
+.countdown::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, var(--countdown-wash), transparent 62%);
+}
+.countdown > * { position: relative; }
+.countdown-num {
+  font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -1.5px;
+  color: var(--countdown-fg); font-variant-numeric: tabular-nums;
+}
+.countdown-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.countdown-dates { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.countdown.upcoming { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }
+.countdown.today    { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }
+.countdown.during   { --countdown-fg: var(--stage-planned); --countdown-wash: var(--stage-planned-ring); }
+.countdown.past     { --countdown-fg: var(--muted); --countdown-wash: transparent; }
+/* Departure day earns a moving sheen; every other state stays still. */
+.countdown.today .countdown-num {
+  background: linear-gradient(100deg, var(--accent) 30%, var(--coral) 50%, var(--accent) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: sheen 2.6s linear infinite;
+}
+@media (max-width: 768px) {
+  .countdown { padding: 13px 16px; gap: 12px; }
+  .countdown-num { font-size: 32px; }
+}
+
 /* ---------- banners ---------- */
 .banner {
   margin: 8px 18px 0; padding: 10px 16px; font-size: 13px;
   border-radius: 10px; border: 1px solid;
+  animation: rise 0.28s var(--ease-out) both;
 }
 .banner.error { background: var(--banner-error-bg); color: var(--banner-error-fg); border-color: var(--banner-error-bd); cursor: pointer; }
 .banner.warn { background: var(--banner-warn-bg); color: var(--banner-warn-fg); border-color: var(--banner-warn-bd); }
@@ -229,10 +344,25 @@ body {
 button {
   background: var(--card); color: var(--text); border: 1px solid var(--border-strong);
   border-radius: 9px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500;
-  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease),
+              background 0.18s var(--ease), transform 0.18s var(--ease), color 0.18s var(--ease);
 }
-button:hover:not(:disabled) { border-color: var(--accent); box-shadow: var(--shadow); }
+button:hover:not(:disabled) { border-color: var(--accent); box-shadow: var(--shadow); transform: translateY(-1px); }
+button:active:not(:disabled) { transform: translateY(0); transition-duration: 0.05s; }
 button:disabled { opacity: 0.45; cursor: default; }
+/* Chrome-less buttons (nav rows, card headers, icon affordances) are part of a surface
+   rather than sitting on one — they tint on hover instead of lifting off the page. */
+.tab, .trip-name, .trip-del, .drawer-item, .drawer-back, .bcard-head, .leg-summary,
+.leg-drag-handle, .notif-bell, .theme-toggle, .sidebar-app-nav button, .chip-toggle {
+  transform: none;
+}
+.tab:hover:not(:disabled), .trip-name:hover:not(:disabled), .trip-del:hover:not(:disabled),
+.drawer-item:hover:not(:disabled), .drawer-back:hover:not(:disabled), .bcard-head:hover:not(:disabled),
+.leg-summary:hover:not(:disabled), .leg-drag-handle:hover:not(:disabled), .notif-bell:hover:not(:disabled),
+.theme-toggle:hover:not(:disabled), .sidebar-app-nav button:hover:not(:disabled),
+.chip-toggle:hover:not(:disabled) {
+  transform: none;
+}
 button.primary {
   background: var(--accent); border-color: var(--accent); color: var(--on-accent);
   box-shadow: var(--accent-glow);
@@ -333,7 +463,11 @@ a { color: var(--accent-dark); }
   display: flex; align-items: center; gap: 10px;
   background: var(--card); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: var(--shadow); padding: 11px 14px; margin: 8px 0;
+  transition: opacity 0.2s var(--ease), box-shadow 0.2s var(--ease-out),
+              border-color 0.2s var(--ease), transform 0.2s var(--ease-out);
+  animation: rise 0.28s var(--ease-out) both;
 }
+.todo:hover { transform: translateX(2px); border-color: var(--border-strong); }
 .todo.done { opacity: 0.55; box-shadow: none; }
 .todo.done .grow { text-decoration: line-through; }
 .todo input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
@@ -388,7 +522,10 @@ a { color: var(--accent-dark); }
 .day-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; margin: 12px 0;
+  transition: box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease);
+  animation: rise 0.3s var(--ease-out) both;
 }
+.day-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
 .day-head { display: flex; gap: 8px; align-items: center; }
 .wake, .alarm { font-size: 12px; color: var(--muted); }
 .alarm { margin-left: auto; }
@@ -412,9 +549,14 @@ a { color: var(--accent-dark); }
 .pcard {
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+  transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out),
+              border-color 0.22s var(--ease), opacity 0.22s var(--ease);
+  animation: pop 0.32s var(--ease-out) both;
 }
+.pcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
 .pcard.dropped { opacity: 0.5; }
-.pcard-img { width: 100%; height: 160px; object-fit: cover; display: block; }
+.pcard-img { width: 100%; height: 160px; object-fit: cover; display: block; transition: transform 0.4s var(--ease-out); }
+.pcard:hover .pcard-img { transform: scale(1.04); }
 .pcard-img.empty {
   display: flex; align-items: center; justify-content: center;
   font-size: 40px; background: var(--card-tint); color: var(--muted);
@@ -433,8 +575,9 @@ a { color: var(--accent-dark); }
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: var(--shadow-lg); list-style: none; margin: 0; padding: 4px;
   max-height: 220px; overflow-y: auto;
+  animation: pop 0.18s var(--ease-out) both;
 }
-.autocomplete li { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.autocomplete li { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; transition: background 0.15s var(--ease), color 0.15s var(--ease); }
 .autocomplete li:hover, .autocomplete li.active { background: var(--accent-tint); color: var(--accent-dark); }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-toggle {
@@ -461,7 +604,11 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 .bcard {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: var(--shadow); margin: 8px 0; overflow: hidden;
+  transition: box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease);
+  animation: rise 0.3s var(--ease-out) both;
 }
+.bcard:hover { box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
+.bcard-body { animation: rise 0.24s var(--ease-out) both; }
 .bcard-head {
   display: flex; align-items: center; gap: 10px; width: 100%;
   background: none; border: none; border-radius: 0; box-shadow: none;
@@ -477,8 +624,12 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 .leg-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 20px; }
 .leg-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: var(--shadow); overflow: hidden; transition: opacity 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow); overflow: hidden;
+  transition: opacity 0.15s var(--ease), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease);
+  animation: rise 0.3s var(--ease-out) both;
 }
+.leg-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
+.leg-body { animation: rise 0.24s var(--ease-out) both; }
 .leg-card.dragging { opacity: 0.5; }
 .leg-card.drag-over { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
 .leg-head { display: flex; align-items: stretch; }
@@ -571,11 +722,13 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 .modal-overlay {
   position: fixed; inset: 0; background: var(--overlay);
   display: flex; align-items: center; justify-content: center; z-index: 1000;
+  animation: fade 0.18s var(--ease) both;
 }
 .modal {
   background: var(--card); border-radius: 16px;
   padding: 20px 22px; max-width: 460px; width: calc(100% - 40px);
   box-shadow: var(--shadow-lg);
+  animation: pop 0.26s var(--ease-out) both;
 }
 .modal h3 { margin: 0 0 8px; color: var(--coral); text-transform: none; letter-spacing: 0; font-size: 15px; }
 .modal p { margin: 0 0 16px; font-size: 13px; }
@@ -586,10 +739,12 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 .crumb { display: none; }
 .drawer-overlay {
   position: fixed; inset: 0; background: var(--overlay); z-index: 1200;
+  animation: fade 0.2s var(--ease) both;
 }
 .drawer {
   position: absolute; top: 0; left: 0; bottom: 0; width: 250px;
   background: var(--card); box-shadow: var(--shadow-lg);
+  animation: slide-in-left 0.26s var(--ease-out) both;
   padding: 12px; padding-top: calc(12px + env(safe-area-inset-top));
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
   overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
@@ -628,6 +783,9 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 /* ---------- mobile ---------- */
 @media (max-width: 768px) {
   .app { flex-direction: column; height: 100dvh; }
+
+  /* No gutter to show it in — the artwork would only sit behind text. */
+  .backdrop { display: none; }
 
   /* Sidebar becomes a slim top bar: hamburger + "trip › page" breadcrumb.
      Brand, new-trip and the trip switcher all live in the drawer. */
@@ -689,4 +847,18 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   input, select, textarea { font-size: 16px; }
   button { padding: 9px 14px; }
   button.small { padding: 6px 10px; }
+}
+
+/* ---------- reduced motion ----------
+   Nothing above is load-bearing, so honour the OS setting by collapsing every animation
+   and transition to effectively instant. Kept last so it wins on specificity ties. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .pcard:hover, .todo:hover, button:hover:not(:disabled) { transform: none !important; }
+  .pcard:hover .pcard-img { transform: none !important; }
 }

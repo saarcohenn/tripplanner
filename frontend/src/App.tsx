@@ -14,6 +14,7 @@ import ProfileTab from "./components/ProfileTab";
 import RoomsTab from "./components/RoomsTab";
 import SetupAdminForm from "./components/SetupAdminForm";
 import AuthGate from "./components/AuthGate";
+import Backdrop from "./components/Backdrop";
 
 const TABS = ["Overview", "Map", "Places", "Plan", "Todos", "Bookings", "Expenses", "Import", "Rooms", "Profile", "Settings"] as const;
 type Tab = (typeof TABS)[number];
@@ -251,6 +252,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <Backdrop />
       <aside className="sidebar">
         <button className="hamburger" aria-label="Open menu" onClick={() => setMenuOpen(true)}>☰</button>
         {/* Mobile top bar shows where you are (trip › page); the brand lives in the drawer */}
