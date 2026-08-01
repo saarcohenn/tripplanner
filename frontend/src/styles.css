@@ -321,6 +321,27 @@ body {
   color: var(--countdown-fg); font-variant-numeric: tabular-nums;
 }
 .countdown-label { font-size: 13px; font-weight: 600; color: var(--text); }
+/* Landmark photos, fanned and overlapping at the card's trailing edge. margin-left:auto
+   pushes the stack there without needing a spacer element. */
+.countdown-stack { display: flex; margin-left: auto; padding-left: 12px; flex: 0 0 auto; }
+.countdown-stack-img {
+  width: 74px; height: 56px; object-fit: cover; display: block;
+  border-radius: 10px; border: 2px solid var(--card); box-shadow: var(--shadow);
+  transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
+}
+/* Each photo after the first tucks under the one before it. */
+.countdown-stack-img + .countdown-stack-img { margin-left: -26px; }
+.countdown-stack-img:nth-child(1) { transform: rotate(-3deg); }
+.countdown-stack-img:nth-child(3) { transform: rotate(3deg); }
+/* Fan out on hover so every photo in the stack is fully visible. */
+.countdown-stack:hover .countdown-stack-img { transform: none; margin-left: 5px; box-shadow: var(--shadow-lg); }
+.countdown-stack:hover .countdown-stack-img:first-child { margin-left: 0; }
+
+@media (max-width: 560px) {
+  /* Two photos is all that fits beside the number on a phone. */
+  .countdown-stack-img { width: 56px; height: 44px; }
+  .countdown-stack-img:nth-child(3) { display: none; }
+}
 .countdown-dates { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .countdown.upcoming { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }
 .countdown.today    { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }

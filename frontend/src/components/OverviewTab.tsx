@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../api";
-import type { Leg, TripDetail } from "../types";
+import type { Leg, Place, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
 
 function fmtDate(d: string | null): string {
@@ -25,12 +25,63 @@ function daysUntil(iso: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
+const PRIORITY_RANK: Record<string, number> = { must: 0, want: 1, maybe: 2 };
+
+/**
+ * Picks the photos for the countdown's stack: one landmark per country the trip visits,
+ * so a multi-country trip previews each leg of it. Falls back to a second photo from the
+ * same country when there's only one, and caps at three so the stack stays readable.
+ *
+ * Deliberately drawn from the trip's own places rather than looking up famous landmarks —
+ * this app never surfaces places the user didn't choose, and their photos are already
+ * fetched and cached.
+ */
+function landmarkPhotos(legs: Leg[], places: Place[]): Place[] {
+  const countryOfLeg = new Map(legs.map((l) => [l.id, (l.country || "").trim()]));
+  const withPhotos = places
+    .filter((p) => p.photo_ref && p.status !== "dropped")
+    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
+  if (withPhotos.length === 0) return [];
+
+  const byCountry = new Map<string, Place[]>();
+  for (const p of withPhotos) {
+    const country = countryOfLeg.get(p.leg_id ?? -1) || "";
+    byCountry.set(country, [...(byCountry.get(country) || []), p]);
+  }
+  // Country order follows the itinerary, not the map's iteration order.
+  const countries = Array.from(new Set(legs.map((l) => (l.country || "").trim())))
+    .filter((c) => byCountry.has(c));
+  const ordered = countries.length ? countries : Array.from(byCountry.keys());
+
+  if (ordered.length <= 1) return (byCountry.get(ordered[0]) || withPhotos).slice(0, 2);
+  return ordered.slice(0, 3).map((c) => byCountry.get(c)![0]);
+}
+
+function PhotoStack({ photos }: { photos: Place[] }) {
+  if (photos.length === 0) return null;
+  return (
+    <div className="countdown-stack" aria-hidden="true">
+      {photos.map((p, i) => (
+        <img
+          key={p.id}
+          className="countdown-stack-img"
+          style={{ zIndex: photos.length - i }}
+          src={`/api/places/${p.id}/photo`}
+          alt=""
+          loading="lazy"
+          title={p.name}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Countdown to (or through) the trip. Deliberately date-only rather than a ticking
  * hh:mm:ss — a trip is planned in days, and a live clock would re-render every second
  * for no real information.
  */
-function Countdown({ start, end }: { start: string | null; end: string | null }) {
+function Countdown({ start, end, photos }: { start: string | null; end: string | null; photos: Place[] }) {
   if (!start) return null;
   const toStart = daysUntil(start);
   if (isNaN(toStart)) return null;
@@ -71,12 +122,14 @@ function Countdown({ start, end }: { start: string | null; end: string | null })
           {state === "upcoming" && !isNaN(totalDays) && ` · ${totalDays} days`}
         </span>
       </div>
+      <PhotoStack photos={photos} />
     </div>
   );
 }
 
 export default function OverviewTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
-  const { trip, legs } = detail;
+  const { trip, legs, places } = detail;
+  const photos = useMemo(() => landmarkPhotos(legs, places), [legs, places]);
   const [form, setForm] = useState({ ...trip });
   const [newLeg, setNewLeg] = useState({ city: "", country: "", arrive_date: "", depart_date: "" });
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -161,7 +214,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
   return (
     <div className="pad">
       {/* Driven by the form (not the saved trip) so it re-counts live as you pick dates. */}
-      <Countdown start={form.start_date} end={form.end_date} />
+      <Countdown start={form.start_date} end={form.end_date} photos={photos} />
       {/* Two independent groups — side by side once there's width for it, so a wide screen
           shows the whole trip without scrolling instead of stretching one long column. */}
       <div className="ov-cols">
