@@ -27,6 +27,7 @@
 
   --on-accent: #ffffff;              /* text on a filled accent surface */
   --on-danger: #ffffff;
+  --on-brand: #ffffff;               /* text on a booking provider's own colour */
   --accent-glow: 0 2px 8px rgba(232, 128, 5, 0.32);
   --focus-ring: 0 0 0 3px rgba(232, 128, 5, 0.15);
   --overlay: rgba(51, 32, 15, 0.45); /* modal + drawer scrim */
@@ -74,6 +75,8 @@
 
   --on-accent: #1b1103;
   --on-danger: #2a0d0a;
+  /* Provider colours are the same in both themes, so their contrast colour is too. */
+  --on-brand: #ffffff;
   --accent-glow: 0 2px 12px rgba(245, 147, 49, 0.34);
   --focus-ring: 0 0 0 3px rgba(245, 147, 49, 0.24);
   --overlay: rgba(3, 6, 15, 0.66);
@@ -621,25 +624,79 @@ a { color: var(--accent-dark); }
 .leg-add-row .two-col input:first-child { min-width: 0; }
 
 /* ---------- booking provider links ---------- */
-/* Providers wrap inside one cell instead of taking a column each, so adding a third didn't
+/* Providers wrap inside one cell instead of taking a column each, so a third one didn't
    push the stay table into a sideways scroll on a phone. */
-.provider-links { display: flex; flex-wrap: wrap; gap: 6px; }
-/* A provider we can't build a working link for: shown so it's clear it exists, but inert,
-   with the title saying what's missing. */
-.linkbtn.disabled {
-  color: var(--placeholder); border-color: var(--border);
-  cursor: not-allowed; box-shadow: none; user-select: none;
+.provider-links { display: flex; flex-wrap: wrap; gap: 2px; }
+/* Borderless: six of these on a page read as a wall of boxes when each is a bordered
+   button, and the coloured mark already says "this is a link to somewhere else". */
+.plink {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px 4px 4px; border: none; border-radius: 999px;
+  background: none; box-shadow: none; text-decoration: none;
+  color: var(--text); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  transition: background 0.15s var(--ease);
 }
+.plink:hover { background: var(--card-tint); box-shadow: none; }
+/* A provider we can't build a working link for: still listed so it's clear it exists, but
+   inert and drained of colour, with the title saying what's missing. */
+.plink.disabled { color: var(--placeholder); cursor: not-allowed; user-select: none; }
+.plink.disabled .pmark { filter: grayscale(1); opacity: 0.45; }
+/* Each provider's own colour as an identifying tint behind its initial — enough to tell
+   them apart at a glance without shipping anyone's logo artwork. */
+.pmark {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--on-brand); font-size: 10px; font-weight: 800; letter-spacing: 0;
+}
+
 .finder {
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow); padding: 14px; margin: 10px 0 22px;
 }
+/* Two even columns, or all four across once there's room for it. auto-fit was landing on
+   three at mid widths, which left Return alone on a second row looking unaligned. */
 .finder-fields {
-  display: grid; gap: 10px; margin-bottom: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: grid; gap: 10px 12px; margin-bottom: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .finder-fields > * { min-width: 0; }
 .finder .hint { margin-bottom: 0; }
+@media (min-width: 780px) {
+  .finder-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) {
+  .finder-fields { grid-template-columns: minmax(0, 1fr); }
+}
+/* In the stay table the same three providers repeat on every row, so the marks alone carry
+   it and the names come off — three labelled links per row wrapped onto two lines. The
+   finder appears once, so it keeps its labels and wraps if it must. */
+@media (max-width: 700px) {
+  .table .pname { display: none; }
+  .table .plink { padding: 4px; }
+}
+
+/* The add-row's eight controls wrapped wherever they fit, so nothing lined up until the
+   row was wide enough for one line. Below that it's a tidy grid: title across the top,
+   then the pairs that belong together. */
+@media (max-width: 1200px) {
+  .booking-add {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px; align-items: center;
+  }
+  .booking-add > * { min-width: 0; width: 100%; }
+  .booking-add .b-title { grid-column: 1 / -1; }
+  /* Pinned to the last column, so it rides along at the end of the final part-filled row
+     instead of claiming a row of its own. */
+  .booking-add .fab-add { grid-column: -2 / -1; justify-self: end; width: 38px; }
+}
+/* Enough room for four across, but not for all eight on one line. */
+@media (min-width: 701px) and (max-width: 1200px) {
+  .booking-add { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1201px) {
+  /* On one line the cost field would otherwise grow to match its neighbours. */
+  .booking-add input[type="number"] { max-width: 110px; }
+}
 
 .alert {
   background: var(--card); border: 1px solid var(--border);
@@ -725,7 +782,8 @@ a { color: var(--accent-dark); }
   .todo-add-text { grid-area: 1 / 1 / 1 / -1; min-width: 0; }
   .todo-add-cat { grid-area: 2 / 1; min-width: 0; }
   .todo-add-date { grid-area: 2 / 2; min-width: 0; }
-  .fab-add { grid-area: 2 / 3; }
+  /* Scoped: .fab-add is shared with the bookings add-row, whose grid has different rows. */
+  .todo-add .fab-add { grid-area: 2 / 3; }
 }
 
 /* ---------- map (lives at the top of the Places tab) ----------

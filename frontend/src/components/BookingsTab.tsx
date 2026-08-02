@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Bus, Car, ChevronDown, ChevronRight, Globe, Hotel, Pin, Plane, Ship, Sparkles,
+  Bus, Car, ChevronDown, ChevronRight, Globe, Hotel, Pin, Plane, Plus, Ship, Sparkles,
   Ticket, TrainFront,
 } from "lucide-react";
 import { airportCode } from "../airports";
@@ -75,6 +75,36 @@ function expediaUrl(from: string, to: string, depart: string, ret: string): stri
 }
 
 /**
+ * Each provider's own colour, used only as an identifying tint behind its initial. These
+ * are approximations of the brands' primary colours, not their logos — enough to tell six
+ * links apart at a glance without shipping anyone's artwork or fetching a favicon from a
+ * third party, which this app never does.
+ */
+const PROVIDERS = {
+  booking: { name: "Booking.com", short: "B.", color: "#003580" },
+  airbnb: { name: "Airbnb", short: "A", color: "#ff5a5f" },
+  agoda: { name: "Agoda", short: "ag", color: "#5b4cdb" },
+  google: { name: "Google Flights", short: "G", color: "#4285f4" },
+  skyscanner: { name: "Skyscanner", short: "sky", color: "#0770e3" },
+  expedia: { name: "Expedia", short: "E", color: "#00355f" },
+} as const;
+
+/** Borderless provider link. `url` of null renders it inert, with `hint` saying why. */
+function ProviderLink({ p, url, hint }: { p: { name: string; short: string; color: string }; url: string | null; hint?: string }) {
+  const body = (
+    <>
+      <span className="pmark" style={{ background: p.color }} aria-hidden="true">{p.short}</span>
+      <span className="pname">{p.name}</span>
+    </>
+  );
+  return url ? (
+    <a className="plink" href={url} target="_blank" rel="noreferrer" title={`Search ${p.name}`} aria-label={`Search ${p.name}`}>{body}</a>
+  ) : (
+    <span className="plink disabled" title={hint} aria-label={`${p.name} — ${hint}`}>{body}</span>
+  );
+}
+
+/**
  * Flight search that stands on its own: it's the first thing you need when starting a trip,
  * which is exactly when there are no legs and no dates to read them from yet. The fields
  * pre-fill from the trip when it has something to offer and are editable regardless.
@@ -95,6 +125,7 @@ function FlightFinder({ trip, legs }: { trip: Trip; legs: Leg[] }) {
   const ready = from.trim() !== "" && to.trim() !== "";
   const coded = ready && fromCode != null && toCode != null;
   const dated = depart !== "";
+  const codedHint = coded ? "Pick a departure date" : "Needs an airport code at both ends";
 
   return (
     <div className="finder">
@@ -113,21 +144,18 @@ function FlightFinder({ trip, legs }: { trip: Trip; legs: Leg[] }) {
         </label>
       </div>
       <div className="provider-links">
-        {ready ? (
-          <a className="linkbtn" href={googleFlightsUrl(from, to, depart, ret)} target="_blank" rel="noreferrer">Google Flights ↗</a>
-        ) : (
-          <span className="linkbtn disabled" title="Fill in where you're flying from and to">Google Flights</span>
-        )}
-        {coded && dated ? (
-          <a className="linkbtn" href={skyscannerUrl(fromCode!, toCode!, depart, ret)} target="_blank" rel="noreferrer">Skyscanner ↗</a>
-        ) : (
-          <span className="linkbtn disabled" title={coded ? "Pick a departure date" : "Needs an airport code at both ends"}>Skyscanner</span>
-        )}
-        {coded && dated ? (
-          <a className="linkbtn" href={expediaUrl(fromCode!, toCode!, depart, ret)} target="_blank" rel="noreferrer">Expedia ↗</a>
-        ) : (
-          <span className="linkbtn disabled" title={coded ? "Pick a departure date" : "Needs an airport code at both ends"}>Expedia</span>
-        )}
+        <ProviderLink
+          p={PROVIDERS.google} hint="Fill in where you're flying from and to"
+          url={ready ? googleFlightsUrl(from, to, depart, ret) : null}
+        />
+        <ProviderLink
+          p={PROVIDERS.skyscanner} hint={codedHint}
+          url={coded && dated ? skyscannerUrl(fromCode!, toCode!, depart, ret) : null}
+        />
+        <ProviderLink
+          p={PROVIDERS.expedia} hint={codedHint}
+          url={coded && dated ? expediaUrl(fromCode!, toCode!, depart, ret) : null}
+        />
       </div>
       <p className="hint">
         {coded
@@ -210,9 +238,9 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
                   {/* One wrapping cell rather than a column per provider — a fourth column
                       would push the table into a sideways scroll on a phone. */}
                   <div className="provider-links">
-                    <a className="linkbtn" href={bookingUrl(l)} target="_blank" rel="noreferrer">Booking.com ↗</a>
-                    <a className="linkbtn" href={airbnbUrl(l)} target="_blank" rel="noreferrer">Airbnb ↗</a>
-                    {agoda && <a className="linkbtn" href={agoda} target="_blank" rel="noreferrer">Agoda ↗</a>}
+                    <ProviderLink p={PROVIDERS.booking} url={bookingUrl(l)} />
+                    <ProviderLink p={PROVIDERS.airbnb} url={airbnbUrl(l)} />
+                    <ProviderLink p={PROVIDERS.agoda} url={agoda} hint={`No Agoda city page for "${l.country || "this country"}"`} />
                   </div>
                 </td>
               </tr>
@@ -226,18 +254,20 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
         Bookings
         {totalHome > 0 && <span className="hint"> — total ≈ {fmtMoney(totalHome, home)}{anyUnconverted ? " (some rates unavailable)" : ""}</span>}
       </h2>
-      <div className="add-row">
-        <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
-        <input dir="auto" placeholder="Title (e.g. TLV→ICN Korean Air)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <select value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
+      {/* Title leads, so the narrow-width grid fills as "title across the top, then the
+          pairs that belong together" without auto-placement leaving holes. */}
+      <div className="add-row booking-add">
+        <input className="b-title" dir="auto" placeholder="Title (e.g. TLV→ICN Korean Air)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <select title="Type" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+        <select title="City" value={form.leg_id} onChange={(e) => setForm({ ...form, leg_id: e.target.value === "" ? "" : Number(e.target.value) })}>
           <option value="">Trip-wide</option>
           {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
         </select>
         <input type="date" title="Date / check-in" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         <input type="date" title="Check-out" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
-        <input type="number" placeholder="Cost" style={{ width: 90 }} value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
+        <input type="number" placeholder="Cost" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
         <CurrencySelect value={form.currency} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} />
-        <button className="primary" onClick={add}>Add</button>
+        <button className="fab-add" onClick={add} aria-label="Add booking" title="Add booking"><Plus size={18} /></button>
       </div>
 
       {bookings.map((b) => {
