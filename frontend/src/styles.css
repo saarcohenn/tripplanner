@@ -498,6 +498,33 @@ body {
   .bp-pass.today .bp-stub-num { animation: none; }
 }
 
+/* ---------- time fields ----------
+   The wrapper draws the field and the input is stripped to a transparent filler inside it,
+   so the height is ours rather than whatever the platform thinks a time control should be
+   — iOS sizes one from its own content and stands it taller than the inputs beside it.
+   See TimeField.tsx. */
+.time-field {
+  position: relative; display: flex; align-items: center;
+  background: var(--card); border: 1px solid var(--border-strong); border-radius: 9px;
+  padding: 8px 11px;
+}
+.time-field:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.time-field input[type="time"] {
+  -webkit-appearance: none; appearance: none;
+  /* 1.55em is the body line-height, so the inner box matches a text input's line box and
+     the wrapper ends up exactly as tall as the fields beside it. */
+  width: 100%; min-width: 0; height: 1.55em;
+  padding: 0; margin: 0; border: none; background: none; box-shadow: none;
+  font: inherit; font-size: 13px; color: var(--text);
+}
+/* One placeholder, ours, on every platform: Chrome draws its own --:-- and iOS draws
+   nothing, so the native empty rendering is hidden and this stands in for both. */
+.time-field.empty input[type="time"]::-webkit-datetime-edit { opacity: 0; }
+.time-field.empty::after {
+  content: "--:--"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--placeholder); font-size: 13px; pointer-events: none;
+}
+
 /* Three-letter IATA fields — short, spaced out, and always upper case. The placeholder opts
    out of that styling: it's either the code we already know or a plain "e.g." hint, and
    shouting the hint in caps makes it read like a value that's been filled in. */

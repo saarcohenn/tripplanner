@@ -6,6 +6,7 @@ import type { Leg, TripDetail } from "../types";
 import BoardingPass from "./BoardingPass";
 import CurrencySelect from "./CurrencySelect";
 import DateRangePicker from "./DateRangePicker";
+import TimeField from "./TimeField";
 
 function fmtDate(d: string | null): string {
   if (!d) return "?";
@@ -223,15 +224,15 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
                   {/* Local time in this city. Optional — the planner only uses a time you give it. */}
                   <div className="two-col">
                     <label className="block">Lands at
-                      <input
-                        type="time" defaultValue={l.arrive_time ?? ""}
-                        onBlur={(e) => e.target.value !== (l.arrive_time ?? "") && updateLeg(l, { arrive_time: e.target.value })}
+                      <TimeField
+                        value={l.arrive_time} label={`Lands at, ${l.city}`}
+                        onSave={(v) => updateLeg(l, { arrive_time: v })}
                       />
                     </label>
                     <label className="block">Leaves at
-                      <input
-                        type="time" defaultValue={l.depart_time ?? ""}
-                        onBlur={(e) => e.target.value !== (l.depart_time ?? "") && updateLeg(l, { depart_time: e.target.value })}
+                      <TimeField
+                        value={l.depart_time} label={`Leaves at, ${l.city}`}
+                        onSave={(v) => updateLeg(l, { depart_time: v })}
                       />
                     </label>
                   </div>

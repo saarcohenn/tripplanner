@@ -1,14 +1,15 @@
 ---
 name: date-fields
-description: How TripPlanner renders every date field — the shared DateRangePicker/DatePicker in frontend/src/components/DateRangePicker.tsx, its props, its date-handling rules, and how to convert a native <input type="date"> to it. Use when adding, editing, or reviewing any date input in this app.
+description: How TripPlanner renders every date and time field — the shared DateRangePicker/DatePicker and TimeField, their props, the date-handling rules, and how to convert a native <input type="date"> or <input type="time"> to them. Use when adding, editing, or reviewing any date or time input in this app.
 ---
 
-# Date fields
+# Date and time fields
 
-Every date the user picks in this app goes through **one component file**,
-`frontend/src/components/DateRangePicker.tsx`. There are no native
-`<input type="date">` controls left in the UI, and new ones shouldn't appear:
-the native control renders differently in every browser, ignores the app's
+Every date the user picks goes through **one component file**,
+`frontend/src/components/DateRangePicker.tsx`, and every time through
+`TimeField.tsx`. There are no bare `<input type="date">` or `<input
+type="time">` controls left in the UI, and new ones shouldn't appear: native
+date and time controls render differently in every browser, ignore the app's
 theme tokens, and can't show a range, a night count, or trip context.
 
 ## Which one to use
@@ -17,10 +18,12 @@ theme tokens, and can't show a range, a night count, or trip context.
 | --- | --- | --- |
 | Two dates that bracket something (trip, leg, stay, flight out/back) | `DateRangePicker` | `import DateRangePicker from "./DateRangePicker"` |
 | One standalone date (a due date, the day money was spent) | `DatePicker` | `import { DatePicker } from "./DateRangePicker"` |
+| A time of day (a landing, a departure) | `TimeField` | `import TimeField from "./TimeField"` |
 
-Both render the same field and the same popover calendar, so a form never
-mixes two visual languages. `DatePicker` is the range picker in single mode:
-one month grid, no night count, first click commits and closes.
+The two date controls render the same field and the same popover calendar, so a
+form never mixes two visual languages — `DatePicker` is the range picker in
+single mode: one month grid, no night count, first click commits and closes.
+`TimeField` matches their height and placeholder treatment.
 
 ## Props
 
@@ -41,13 +44,27 @@ add a media query for this — how many months fit is about the calendar's width
 not the viewport's shape, and the component already owns it.
 
 ```tsx
-
 <DatePicker
   value={todo.due_date}            // string | null
   onChange={(v) => save(v)}        // null when cleared
   label="Due date"                 // placeholder, default "Pick a date"
 />
+
+<TimeField
+  value={leg.arrive_time}          // string | null, "HH:MM", "" when unset
+  onSave={(v) => save(v)}          // fires on blur, only when changed
+  label="Lands at, Tokyo"          // accessible name; the field has no visible label of its own
+/>
 ```
+
+`TimeField` keeps the platform's native time picker — the iOS wheel beats
+anything worth hand-rolling on a phone — but wraps it so the *resting*
+appearance is ours. Left native, iOS draws an unset time input completely blank
+(no `--:--`, unlike desktop Chrome) and sizes it from its own content, so it
+stands taller than the fields beside it. The wrapper draws the border and the
+placeholder; the input inside is a transparent filler with an explicit height.
+Don't put a bare `<input type="time">` in a form for the same reason there are
+no bare date inputs.
 
 ## Rules that must not be broken
 
