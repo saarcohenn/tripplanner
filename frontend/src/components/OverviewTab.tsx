@@ -220,6 +220,26 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
                       onChange={(a, d) => updateLeg(l, { arrive_date: a, depart_date: d })}
                     />
                   </label>
+                  {/* Local time in this city. Optional — the planner only uses a time you give it. */}
+                  <div className="two-col">
+                    <label className="block">Lands at
+                      <input
+                        type="time" defaultValue={l.arrive_time ?? ""}
+                        onBlur={(e) => e.target.value !== (l.arrive_time ?? "") && updateLeg(l, { arrive_time: e.target.value })}
+                      />
+                    </label>
+                    <label className="block">Leaves at
+                      <input
+                        type="time" defaultValue={l.depart_time ?? ""}
+                        onBlur={(e) => e.target.value !== (l.depart_time ?? "") && updateLeg(l, { depart_time: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <p className="hint">
+                    Local times, both optional. Given one, the plan sizes that day around it — a late
+                    landing becomes transfer and rest instead of sightseeing, an early departure sets
+                    the last morning's alarm. Left blank, the day is planned as a normal full one.
+                  </p>
                   <div className="row spread">
                     <span />
                     <button className="danger small" onClick={() => deleteLeg(l)}>Delete leg</button>

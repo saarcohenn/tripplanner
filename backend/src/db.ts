@@ -209,6 +209,13 @@ addColumn("trips", "room_id INTEGER REFERENCES rooms(id)");
 // let you supply the ones it doesn't know instead of it inventing something plausible.
 addColumn("legs", "airport TEXT DEFAULT ''");
 addColumn("trips", "home_airport TEXT DEFAULT ''");
+// Local "HH:MM" at the leg's own city — never converted, never derived. What these buy the
+// planner isn't the nights count (that's date arithmetic and already right) but which days
+// are actually usable: a 23:40 landing makes the arrival day transfer-and-sleep, and an
+// early departure sets the last day's alarm. Blank means unknown, and the planner then
+// behaves exactly as it did before.
+addColumn("legs", "arrive_time TEXT DEFAULT ''");
+addColumn("legs", "depart_time TEXT DEFAULT ''");
 
 // Rooms used to have only 'owner'/'member' roles; 'member' is now split into 'editor'/'viewer'.
 // Existing non-owner members keep the edit rights they already had rather than being silently

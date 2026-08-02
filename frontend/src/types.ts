@@ -72,7 +72,10 @@ export type Leg = {
   country: string;
   airport: string;
   arrive_date: string | null;
+  /** Local "HH:MM" in this leg's own city, or "" when unknown. Never converted. */
+  arrive_time: string;
   depart_date: string | null;
+  depart_time: string;
   lat: number | null;
   lng: number | null;
   notes: string;

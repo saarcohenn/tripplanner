@@ -60,6 +60,13 @@ function fmtPassDate(iso: string | null): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]}`;
 }
 
+/** "05 OCT · 22:15" once a local time is known, just the date until then. */
+function withTime(iso: string | null, time: string | null | undefined): string {
+  const date = fmtPassDate(iso);
+  const t = (time || "").trim();
+  return iso && t ? `${date} · ${t}` : date;
+}
+
 const PRIORITY_RANK: Record<string, number> = { must: 0, want: 1, maybe: 2 };
 
 /**
@@ -123,7 +130,7 @@ function buildHops(trip: Trip, legs: Leg[], places: Place[]): Hop[] {
     const depart = last.depart_date ?? (i === stays.length - 1 ? trip.end_date : null);
     const nights = arrive && depart ? dayDiff(arrive, depart) : NaN;
 
-    const facts: [string, string][] = [["Departs", fmtPassDate(arrive)]];
+    const facts: [string, string][] = [["Arrives", withTime(arrive, first.arrive_time)]];
     if (!isNaN(nights) && nights > 0) facts.push(["Stay", `${nights} ${nights === 1 ? "night" : "nights"}`]);
     facts.push([stay.legs.length > 1 ? "Cities" : "City", stay.legs.map((l) => l.city).filter(Boolean).join(" · ")]);
 
@@ -144,7 +151,7 @@ function buildHops(trip: Trip, legs: Leg[], places: Place[]): Hop[] {
     const lastStay = stays[stays.length - 1];
     const back = lastStay.legs[lastStay.legs.length - 1].depart_date ?? trip.end_date;
     const total = trip.start_date && trip.end_date ? dayDiff(trip.start_date, trip.end_date) : NaN;
-    const facts: [string, string][] = [["Departs", fmtPassDate(back)]];
+    const facts: [string, string][] = [["Departs", withTime(back, lastStay.legs[lastStay.legs.length - 1].depart_time)]];
     if (!isNaN(total) && total > 0) facts.push(["Trip", `${total + 1} days`]);
     facts.push(["Home", trip.home_city]);
     hops.push({ key: "home", from: prev, to: home, country: "", date: back, facts, photoId: null });

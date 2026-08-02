@@ -208,6 +208,12 @@ function getBundle(tripId: number): TripBundle {
   return { trip, legs, places, bookings };
 }
 
+/** Keeps only a well-formed local "HH:MM"; anything else becomes blank rather than a guess. */
+function hhmm(v: unknown): string {
+  const s = String(v ?? "").trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : "";
+}
+
 /** The room a new trip/import lands in when the caller doesn't pick one: their own personal room. */
 function defaultRoomId(userId: number): number {
   const room = db.prepare("SELECT room_id FROM room_members WHERE user_id = ? ORDER BY room_id LIMIT 1").get(userId) as { room_id: number } | undefined;
@@ -287,8 +293,11 @@ api.put("/trips/:id/room", wrap((req, res) => {
 
 // ---------- generic child-collection CRUD (legs, places, todos, bookings) ----------
 type ChildSpec = { table: string; fields: string[]; affectsPlan: boolean };
+/** Fields normalised through hhmm() on the way in, so a bad clock value lands as blank. */
+const TIME_FIELDS = new Set(["arrive_time", "depart_time"]);
+const cellValue = (col: string, v: unknown) => (TIME_FIELDS.has(col) ? hhmm(v) : v);
 const children: Record<string, ChildSpec> = {
-  legs: { table: "legs", fields: ["seq", "city", "country", "airport", "arrive_date", "depart_date", "lat", "lng", "notes"], affectsPlan: true },
+  legs: { table: "legs", fields: ["seq", "city", "country", "airport", "arrive_date", "arrive_time", "depart_date", "depart_time", "lat", "lng", "notes"], affectsPlan: true },
   places: { table: "places", fields: ["leg_id", "name", "category", "lat", "lng", "duration_min", "priority", "status", "notes", "gmaps_url", "google_place_id", "photo_ref"], affectsPlan: true },
   todos: { table: "todos", fields: ["text", "category", "due_date", "done"], affectsPlan: false },
   expenses: { table: "expenses", fields: ["leg_id", "category", "title", "amount", "currency", "date", "notes"], affectsPlan: false },
@@ -302,7 +311,7 @@ for (const [name, spec] of Object.entries(children)) {
     const cols = spec.fields.filter((f) => f in req.body);
     const r = db.prepare(
       `INSERT INTO ${spec.table} (trip_id${cols.map((c) => `, ${c}`).join("")}) VALUES (?${", ?".repeat(cols.length)})`
-    ).run(tripId, ...cols.map((c) => req.body[c]));
+    ).run(tripId, ...cols.map((c) => cellValue(c, req.body[c])));
     if (spec.affectsPlan) bumpPlanVersion(tripId);
     res.json(db.prepare(`SELECT * FROM ${spec.table} WHERE id = ?`).get(r.lastInsertRowid));
   }));
@@ -315,7 +324,7 @@ for (const [name, spec] of Object.entries(children)) {
     const cols = spec.fields.filter((f) => f in req.body);
     if (cols.length) {
       db.prepare(`UPDATE ${spec.table} SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
-        .run(...cols.map((c) => req.body[c]), id);
+        .run(...cols.map((c) => cellValue(c, req.body[c])), id);
       if (spec.affectsPlan) bumpPlanVersion(row.trip_id);
     }
     res.json(db.prepare(`SELECT * FROM ${spec.table} WHERE id = ?`).get(id));
@@ -483,8 +492,13 @@ api.post("/import/conversation", wrap(async (req, res) => {
     const legIdByCity = new Map<string, number>();
     (t.legs || []).forEach((l: any, i: number) => {
       const lr = db.prepare(
-        `INSERT INTO legs (trip_id, seq, city, country, arrive_date, depart_date, lat, lng) VALUES (?,?,?,?,?,?,?,?)`
-      ).run(tripId, i, l.city || `Leg ${i + 1}`, l.country || "", l.arrive_date ?? null, l.depart_date ?? null, l.lat ?? null, l.lng ?? null);
+        `INSERT INTO legs (trip_id, seq, city, country, arrive_date, arrive_time, depart_date, depart_time, lat, lng)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        tripId, i, l.city || `Leg ${i + 1}`, l.country || "",
+        l.arrive_date ?? null, hhmm(l.arrive_time), l.depart_date ?? null, hhmm(l.depart_time),
+        l.lat ?? null, l.lng ?? null
+      );
       legIdByCity.set((l.city || "").toLowerCase(), Number(lr.lastInsertRowid));
     });
     for (const pl of t.places || []) {

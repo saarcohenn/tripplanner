@@ -9,10 +9,14 @@ export type TripBundle = {
 };
 
 function bundleText(b: TripBundle): string {
+  // Times are local to the leg's own city and only present when the user supplied them —
+  // an absent time means unknown, not midnight, so it's left off the line entirely.
+  const at = (date: string | null, time: string | null) =>
+    `${date || "?"}${date && time ? ` ${time}` : ""}`;
   const legLines = b.legs
     .map(
       (l) =>
-        `- leg#${l.id} [${l.seq}] ${l.city}, ${l.country} | ${l.arrive_date || "?"} -> ${l.depart_date || "?"}`
+        `- leg#${l.id} [${l.seq}] ${l.city}, ${l.country} | ${at(l.arrive_date, l.arrive_time)} -> ${at(l.depart_date, l.depart_time)}`
     )
     .join("\n");
   const placeLines = b.places
@@ -52,6 +56,7 @@ Rules:
 - 'must' places get scheduled first; 'want' next; 'maybe' only if the day has room — otherwise leave them out and note it.
 - Include a wake_time per day; flag days that require waking before 07:30.
 - Insert explicit rest blocks on dense days and after intercity travel days.
+- A leg line may carry an arrival or departure time (local to that city). Treat it as fixed and size that day around it: a late landing makes the arrival day transfer, food and sleep rather than sightseeing, and an early departure ends the last day at check-out and drives that day's alarm_time. When a leg gives no time, do not assume one — plan that day as a normal full day.
 - This is a DETAILED travel guide, not just a timetable. For every visit item write "details": 1-3 sentences — how to get there from the previous stop (name the metro/train line or say walk/taxi; keep it generic if unsure) and what to expect there. Add a "tip" when there is a real queue-avoidance or booking tip (arrive at opening, prebook timed tickets, best entrance); otherwise leave tip empty. Never invent facts you are unsure of — generic advice beats wrong specifics.
 - Schedule the most crowded attraction of each day at opening time when practical, and derive each day's "alarm_time": the latest wake-up that still beats the lines at the first attraction, with "alarm_reason" explaining it (e.g. "Alarm 06:45 — be at Fushimi Inari by 07:30, before the tour groups").
 - Reply with ONLY a JSON object, no prose.`;
@@ -134,7 +139,10 @@ Extract the trip as JSON with this exact shape:
   "notes": "important constraints/preferences mentioned (budget details, pace, dietary, etc.)",
   "legs": [
     { "city": "string", "country": "string", "arrive_date": "YYYY-MM-DD or null",
-      "depart_date": "YYYY-MM-DD or null", "lat": number or null, "lng": number or null }
+      "arrive_time": "HH:MM local, ONLY if the conversation states it, else null",
+      "depart_date": "YYYY-MM-DD or null",
+      "depart_time": "HH:MM local, ONLY if the conversation states it, else null",
+      "lat": number or null, "lng": number or null }
   ],
   "places": [
     { "name": "string", "city": "which leg city it belongs to", "category": "sight|food|nature|museum|shopping|nightlife|other",
