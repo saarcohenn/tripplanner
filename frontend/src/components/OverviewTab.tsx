@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { airportCode } from "../airports";
 import { api } from "../api";
-import type { Leg, Place, TripDetail } from "../types";
+import type { Leg, TripDetail } from "../types";
+import BoardingPass from "./BoardingPass";
 import CurrencySelect from "./CurrencySelect";
 import DateRangePicker from "./DateRangePicker";
 
@@ -17,121 +19,8 @@ function fmtRange(a: string | null, b: string | null): string {
   return `${fmtDate(a)} → ${fmtDate(b)}`;
 }
 
-/** Whole days from local midnight today to local midnight on `iso` (negative once past). */
-function daysUntil(iso: string): number {
-  const target = new Date(`${iso}T00:00:00`);
-  if (isNaN(target.getTime())) return NaN;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
-const PRIORITY_RANK: Record<string, number> = { must: 0, want: 1, maybe: 2 };
-
-/**
- * Picks the photos for the countdown's stack: one landmark per country the trip visits,
- * so a multi-country trip previews each leg of it. Falls back to a second photo from the
- * same country when there's only one, and caps at three so the stack stays readable.
- *
- * Deliberately drawn from the trip's own places rather than looking up famous landmarks —
- * this app never surfaces places the user didn't choose, and their photos are already
- * fetched and cached.
- */
-function landmarkPhotos(legs: Leg[], places: Place[]): Place[] {
-  const countryOfLeg = new Map(legs.map((l) => [l.id, (l.country || "").trim()]));
-  const withPhotos = places
-    .filter((p) => p.photo_ref && p.status !== "dropped")
-    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
-  if (withPhotos.length === 0) return [];
-
-  const byCountry = new Map<string, Place[]>();
-  for (const p of withPhotos) {
-    const country = countryOfLeg.get(p.leg_id ?? -1) || "";
-    byCountry.set(country, [...(byCountry.get(country) || []), p]);
-  }
-  // Country order follows the itinerary, not the map's iteration order.
-  const countries = Array.from(new Set(legs.map((l) => (l.country || "").trim())))
-    .filter((c) => byCountry.has(c));
-  const ordered = countries.length ? countries : Array.from(byCountry.keys());
-
-  if (ordered.length <= 1) return (byCountry.get(ordered[0]) || withPhotos).slice(0, 2);
-  return ordered.slice(0, 3).map((c) => byCountry.get(c)![0]);
-}
-
-function PhotoStack({ photos }: { photos: Place[] }) {
-  if (photos.length === 0) return null;
-  return (
-    <div className="countdown-stack" aria-hidden="true">
-      {photos.map((p, i) => (
-        <img
-          key={p.id}
-          className="countdown-stack-img"
-          style={{ zIndex: photos.length - i }}
-          src={`/api/places/${p.id}/photo`}
-          alt=""
-          loading="lazy"
-          title={p.name}
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * Countdown to (or through) the trip. Deliberately date-only rather than a ticking
- * hh:mm:ss — a trip is planned in days, and a live clock would re-render every second
- * for no real information.
- */
-function Countdown({ start, end, photos }: { start: string | null; end: string | null; photos: Place[] }) {
-  if (!start) return null;
-  const toStart = daysUntil(start);
-  if (isNaN(toStart)) return null;
-  const toEnd = end ? daysUntil(end) : NaN;
-  const totalDays = !isNaN(toEnd) ? toEnd - toStart + 1 : NaN;
-
-  let state: "upcoming" | "today" | "during" | "past";
-  let big: string;
-  let label: string;
-
-  if (toStart > 0) {
-    state = "upcoming";
-    big = String(toStart);
-    label = toStart === 1 ? "day to go" : "days to go";
-  } else if (toStart === 0) {
-    state = "today";
-    big = "Today";
-    label = "your trip starts";
-  } else if (!isNaN(toEnd) && toEnd >= 0) {
-    state = "during";
-    const dayNo = -toStart + 1;
-    big = `Day ${dayNo}`;
-    label = !isNaN(totalDays) ? `of ${totalDays}` : "in progress";
-  } else {
-    state = "past";
-    const since = !isNaN(toEnd) ? -toEnd : -toStart;
-    big = String(since);
-    label = since === 1 ? "day since you got back" : "days since you got back";
-  }
-
-  return (
-    <div className={`countdown ${state}`}>
-      <div className="countdown-num">{big}</div>
-      <div className="countdown-label">
-        {label}
-        <span className="countdown-dates">
-          {fmtDate(start)}{end ? ` → ${fmtDate(end)}` : ""}
-          {state === "upcoming" && !isNaN(totalDays) && ` · ${totalDays} days`}
-        </span>
-      </div>
-      <PhotoStack photos={photos} />
-    </div>
-  );
-}
-
 export default function OverviewTab({ detail, refresh }: { detail: TripDetail; refresh: () => Promise<void> }) {
   const { trip, legs, places } = detail;
-  const photos = useMemo(() => landmarkPhotos(legs, places), [legs, places]);
   const [form, setForm] = useState({ ...trip });
   const [newLeg, setNewLeg] = useState({ city: "", country: "", arrive_date: "", depart_date: "" });
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -142,6 +31,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
     await api.put(`/trips/${trip.id}`, {
       name: form.name, trip_type: form.trip_type, start_date: form.start_date || null,
       end_date: form.end_date || null, home_city: form.home_city,
+      home_airport: (form.home_airport || "").trim().toUpperCase(),
       budget: form.budget === null || form.budget === ("" as any) ? null : Number(form.budget),
       currency: form.currency, notes: form.notes,
     });
@@ -216,7 +106,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
   return (
     <div className="pad">
       {/* Driven by the form (not the saved trip) so it re-counts live as you pick dates. */}
-      <Countdown start={form.start_date} end={form.end_date} photos={photos} />
+      <BoardingPass trip={form} legs={legs} places={places} />
       {/* Two independent groups — side by side once there's width for it, so a wide screen
           shows the whole trip without scrolling instead of stretching one long column. */}
       <div className="ov-cols">
@@ -238,6 +128,14 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
           />
         </label>
         <label>Home city <input dir="auto" value={form.home_city ?? ""} onChange={(e) => setForm({ ...form, home_city: e.target.value })} /></label>
+        <label>Home airport
+          <input
+            dir="ltr" maxLength={3} className="code-input"
+            placeholder={airportCode(form.home_city ?? "", "", null) ?? "e.g. TLV"}
+            value={form.home_airport ?? ""}
+            onChange={(e) => setForm({ ...form, home_airport: e.target.value.toUpperCase() })}
+          />
+        </label>
         <label>Budget <input type="number" value={form.budget ?? ""} onChange={(e) => setForm({ ...form, budget: e.target.value as any })} /></label>
         <label>Budget currency <CurrencySelect value={form.currency || "USD"} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} /></label>
       </div>
@@ -303,6 +201,18 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
                       <input dir="auto" defaultValue={l.country} onBlur={(e) => e.target.value !== l.country && updateLeg(l, { country: e.target.value })} />
                     </label>
                   </div>
+                  <label className="block">Airport code
+                    <input
+                      dir="ltr" maxLength={3} className="code-input"
+                      placeholder={airportCode(l.city, l.country, null) ?? "e.g. ICN"}
+                      defaultValue={l.airport ?? ""}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim().toUpperCase();
+                        if (v !== (l.airport ?? "")) updateLeg(l, { airport: v });
+                      }}
+                    />
+                    <span className="hint">Shown on the boarding pass. Left blank, the app uses the code it knows for this city — and shows none rather than guessing.</span>
+                  </label>
                   <label className="block">Dates
                     <DateRangePicker
                       start={l.arrive_date} end={l.depart_date}

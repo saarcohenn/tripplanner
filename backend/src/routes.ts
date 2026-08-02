@@ -254,7 +254,7 @@ api.get("/trips/:id", wrap((req, res) => {
 api.put("/trips/:id", wrap((req, res) => {
   const id = Number(req.params.id);
   assertTripWrite(req.user.id, id);
-  const fields = ["name", "trip_type", "start_date", "end_date", "home_city", "budget", "currency", "notes", "stage"];
+  const fields = ["name", "trip_type", "start_date", "end_date", "home_city", "home_airport", "budget", "currency", "notes", "stage"];
   const sets = fields.filter((f) => f in req.body);
   if (sets.length) {
     db.prepare(`UPDATE trips SET ${sets.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`)
@@ -288,7 +288,7 @@ api.put("/trips/:id/room", wrap((req, res) => {
 // ---------- generic child-collection CRUD (legs, places, todos, bookings) ----------
 type ChildSpec = { table: string; fields: string[]; affectsPlan: boolean };
 const children: Record<string, ChildSpec> = {
-  legs: { table: "legs", fields: ["seq", "city", "country", "arrive_date", "depart_date", "lat", "lng", "notes"], affectsPlan: true },
+  legs: { table: "legs", fields: ["seq", "city", "country", "airport", "arrive_date", "depart_date", "lat", "lng", "notes"], affectsPlan: true },
   places: { table: "places", fields: ["leg_id", "name", "category", "lat", "lng", "duration_min", "priority", "status", "notes", "gmaps_url", "google_place_id", "photo_ref"], affectsPlan: true },
   todos: { table: "todos", fields: ["text", "category", "due_date", "done"], affectsPlan: false },
   expenses: { table: "expenses", fields: ["leg_id", "category", "title", "amount", "currency", "date", "notes"], affectsPlan: false },

@@ -204,6 +204,11 @@ addColumn("users", "home_currency TEXT DEFAULT 'USD'");
 addColumn("users", "auto_replan TEXT DEFAULT '0'");
 addColumn("llm_usage", "user_id INTEGER REFERENCES users(id)");
 addColumn("trips", "room_id INTEGER REFERENCES rooms(id)");
+// IATA codes for the boarding-pass view. The app only ever shows a code it was given or can
+// look up in its curated city list — never one derived from the city's spelling — so these
+// let you supply the ones it doesn't know instead of it inventing something plausible.
+addColumn("legs", "airport TEXT DEFAULT ''");
+addColumn("trips", "home_airport TEXT DEFAULT ''");
 
 // Rooms used to have only 'owner'/'member' roles; 'member' is now split into 'editor'/'viewer'.
 // Existing non-owner members keep the edit rights they already had rather than being silently

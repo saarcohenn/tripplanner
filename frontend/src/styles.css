@@ -315,62 +315,190 @@ body {
    no containing block that would trap the map's positioned overlays. */
 .main > .pad, .main > .plan-layout { animation: rise 0.26s var(--ease-out) both; }
 
-/* ---------- countdown ---------- */
-.countdown {
-  display: flex; align-items: center; gap: 16px;
-  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-  box-shadow: var(--shadow); padding: 16px 22px; margin: 4px 0 6px;
-  position: relative; overflow: hidden;
-  animation: pop 0.4s var(--ease-out) both;
-}
-/* Warm wash from the leading edge, tinted by trip state. */
-.countdown::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(100deg, var(--countdown-wash), transparent 62%);
-}
-.countdown > * { position: relative; }
-.countdown-num {
-  font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -1.5px;
-  color: var(--countdown-fg); font-variant-numeric: tabular-nums;
-}
-.countdown-label { font-size: 13px; font-weight: 600; color: var(--text); }
-/* Landmark photos, fanned and overlapping at the card's trailing edge. margin-left:auto
-   pushes the stack there without needing a spacer element. */
-.countdown-stack { display: flex; margin-left: auto; padding-left: 12px; flex: 0 0 auto; }
-.countdown-stack-img {
-  width: 74px; height: 56px; object-fit: cover; display: block;
-  border-radius: 10px; border: 2px solid var(--card); box-shadow: var(--shadow);
-  transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
-}
-/* Each photo after the first tucks under the one before it. */
-.countdown-stack-img + .countdown-stack-img { margin-left: -26px; }
-.countdown-stack-img:nth-child(1) { transform: rotate(-3deg); }
-.countdown-stack-img:nth-child(3) { transform: rotate(3deg); }
-/* Fan out on hover so every photo in the stack is fully visible. */
-.countdown-stack:hover .countdown-stack-img { transform: none; margin-left: 5px; box-shadow: var(--shadow-lg); }
-.countdown-stack:hover .countdown-stack-img:first-child { margin-left: 0; }
+/* ---------- boarding-pass deck (the trip countdown) ----------
+   One pass per country hop, stacked and auto-cycling, or cascaded via the spread control.
 
-@media (max-width: 560px) {
-  /* Two photos is all that fits beside the number on a phone. */
-  .countdown-stack-img { width: 56px; height: 44px; }
-  .countdown-stack-img:nth-child(3) { display: none; }
+   Sizing: .bp-wrap fixes the deck's width, so the deck's percentage padding-top (which
+   resolves against that width) sets a slim ~275px-tall ticket on desktop and a square one
+   on a phone without any JS measurement. --rows, set inline, multiplies that height to make
+   room for however many passes are showing; each pass takes 1/rows of it back, so a pass is
+   the same size in either mode. Type scales in cqw off the deck's own width rather than the
+   viewport's, so the ticket holds its proportions wherever it's placed. */
+.bp-wrap { width: min(100%, 720px); margin: 2px auto 16px; }
+.bp-deck {
+  position: relative;
+  padding-top: calc(38.2% * var(--rows, 1));
+  container-type: inline-size;
+  animation: pop 0.4s var(--ease-out) both;
+  transition: padding-top 0.55s var(--ease-out);
 }
-.countdown-dates { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
-.countdown.upcoming { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }
-.countdown.today    { --countdown-fg: var(--accent); --countdown-wash: var(--accent-tint); }
-.countdown.during   { --countdown-fg: var(--stage-planned); --countdown-wash: var(--stage-planned-ring); }
-.countdown.past     { --countdown-fg: var(--muted); --countdown-wash: transparent; }
+.bp-pass {
+  position: absolute; top: 0; left: 0; width: 100%;
+  height: calc(100% / var(--rows, 1));
+  display: flex; overflow: hidden; cursor: pointer;
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  transform-origin: top center;
+  transition: transform 0.55s var(--ease-out), opacity 0.35s var(--ease),
+              box-shadow 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+/* Airline stripe along the top edge, coloured by how close this hop is. */
+.bp-pass::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: var(--bp-fg); z-index: 3;
+}
+.bp-pass.front:hover { border-color: var(--bp-fg); }
+/* Landmark photo from the destination country, washed out and fading in from the right. */
+.bp-art {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  opacity: 0.22; filter: saturate(0.8); pointer-events: none;
+  -webkit-mask-image: linear-gradient(100deg, transparent 6%, #000 82%);
+  mask-image: linear-gradient(100deg, transparent 6%, #000 82%);
+}
+
+.bp-main {
+  position: relative; z-index: 1; flex: 1; min-width: 0;
+  display: flex; flex-direction: column; padding: 3.4cqw 4.2cqw;
+}
+.bp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bp-brand, .bp-seq, .bp-fact-label {
+  font-size: clamp(8px, 1.45cqw, 11px); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+}
+.bp-brand { display: inline-flex; align-items: center; gap: 5px; color: var(--bp-fg); }
+.bp-seq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Sits directly under the header rather than centred, so a pass behind a spread deck still
+   shows its route in the sliver that's visible. */
+.bp-route { display: flex; align-items: flex-end; gap: 2cqw; margin-top: 2.4cqw; }
+.bp-port { display: flex; flex-direction: column; min-width: 0; }
+.bp-port.to { align-items: flex-end; text-align: right; }
+.bp-code {
+  font-size: clamp(21px, 6.6cqw, 52px); font-weight: 800; line-height: 1;
+  letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums;
+}
+/* No code known for this city — say so plainly instead of inventing three letters. */
+.bp-nocode { font-style: normal; color: var(--placeholder); letter-spacing: 0.06em; }
+.bp-city {
+  font-size: clamp(10px, 2cqw, 15px); color: var(--muted); margin-top: 0.5cqw;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.bp-path { flex: 1; display: flex; align-items: center; gap: 1cqw; padding-bottom: 2.6cqw; color: var(--bp-fg); }
+.bp-dash { flex: 1; border-top: 2px dashed var(--border-strong); }
+.bp-plane { flex: 0 0 auto; }
+
+.bp-facts {
+  margin-top: auto; display: flex; flex-wrap: wrap; gap: 0.6cqw 4cqw;
+  padding-top: 2cqw; border-top: 1px dashed var(--border-strong);
+}
+.bp-fact { display: flex; flex-direction: column; min-width: 0; }
+.bp-fact-value {
+  font-size: clamp(11px, 2.1cqw, 16px); font-weight: 600; color: var(--text); margin-top: 0.3cqw;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* The tear-off stub carries this hop's own countdown. Count at the top, barcode at the
+   bottom — which is also what keeps the number readable in the sliver a spread deck shows. */
+.bp-stub {
+  position: relative; z-index: 1; flex: 0 0 27%; width: 27%;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  gap: 1.6cqw; padding: 3.4cqw 2cqw; background: var(--card-tint);
+  border-left: 2px dashed var(--border-strong);
+}
+/* Perforation notches: circles in the page colour, half of each clipped by the pass. Above
+   the accent stripe, so the tear line reads as punched right through it. */
+.bp-stub::before, .bp-stub::after {
+  content: ""; position: absolute; left: -9px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--bg); z-index: 4;
+}
+.bp-stub::before { top: -8px; }
+.bp-stub::after { bottom: -8px; }
+.bp-stub-body { text-align: center; min-width: 0; }
+.bp-stub-num {
+  font-size: clamp(24px, 7.6cqw, 58px); font-weight: 800; line-height: 1;
+  letter-spacing: -0.03em; color: var(--bp-fg); font-variant-numeric: tabular-nums;
+}
+.bp-stub-label {
+  font-size: clamp(8px, 1.45cqw, 11px); font-weight: 700; margin-top: 0.8cqw;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+}
+.bp-barcode {
+  display: flex; align-items: stretch; gap: 2px;
+  height: clamp(16px, 4.4cqw, 32px); color: var(--text); opacity: 0.5;
+}
+.bp-barcode span { background: currentColor; }
+
+.bp-pass.upcoming { --bp-fg: var(--accent); }
+.bp-pass.today    { --bp-fg: var(--accent); }
+.bp-pass.past     { --bp-fg: var(--stage-planned); }
+.bp-pass.tbd      { --bp-fg: var(--muted); }
 /* Departure day earns a moving sheen; every other state stays still. */
-.countdown.today .countdown-num {
+.bp-pass.today .bp-stub-num {
   background: linear-gradient(100deg, var(--accent) 30%, var(--coral) 50%, var(--accent) 70%);
   background-size: 200% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent;
   animation: sheen 2.6s linear infinite;
 }
-@media (max-width: 768px) {
-  .countdown { padding: 13px 16px; gap: 12px; }
-  .countdown-num { font-size: 32px; }
+
+.bp-controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+.bp-arrow, .bp-spread {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; font-size: 12px; font-weight: 600; border-radius: 9px;
+  background: transparent; border: 1px solid transparent; color: var(--muted); box-shadow: none;
 }
+.bp-arrow:hover:not(:disabled), .bp-spread:hover:not(:disabled) {
+  background: var(--card); border-color: var(--border-strong); color: var(--text);
+  box-shadow: none; transform: none;
+}
+.bp-spread.on { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-dark); }
+.bp-dots { display: flex; align-items: center; gap: 6px; }
+.bp-dot {
+  width: 7px; height: 7px; padding: 0; border: none; border-radius: 999px;
+  background: var(--border-strong); box-shadow: none;
+  transition: width 0.3s var(--ease-out), background 0.3s var(--ease);
+}
+.bp-dot:hover:not(:disabled) { background: var(--muted); box-shadow: none; transform: none; }
+.bp-dot.on { width: 20px; background: var(--accent); }
+
+/* Phones get a square ticket with the stub torn off the bottom instead of the side. */
+@media (max-width: 700px) {
+  .bp-wrap { margin-bottom: 12px; }
+  .bp-deck { padding-top: calc(100% * var(--rows, 1)); }
+  .bp-pass { flex-direction: column; border-radius: 14px; }
+  .bp-main { padding: 5cqw 5.5cqw; }
+  .bp-brand, .bp-seq, .bp-fact-label, .bp-stub-label { font-size: clamp(9px, 2.7cqw, 12px); }
+  .bp-code { font-size: clamp(26px, 11cqw, 46px); }
+  .bp-city { font-size: clamp(11px, 3.4cqw, 15px); margin-top: 1cqw; }
+  .bp-route { gap: 3cqw; margin-top: 4cqw; }
+  .bp-path { padding-bottom: 4cqw; }
+  .bp-facts { gap: 1cqw 6cqw; padding-top: 3cqw; }
+  .bp-fact-value { font-size: clamp(12px, 3.6cqw, 16px); }
+  .bp-stub {
+    flex: 0 0 26%; width: auto; flex-direction: row; justify-content: space-between;
+    padding: 3cqw 5.5cqw; border-left: none; border-top: 2px dashed var(--border-strong);
+  }
+  .bp-stub::before, .bp-stub::after { top: -8px; bottom: auto; }
+  .bp-stub::before { left: -9px; }
+  .bp-stub::after { left: auto; right: -9px; }
+  .bp-stub-body { text-align: left; }
+  .bp-stub-num { font-size: clamp(26px, 10cqw, 46px); }
+  .bp-stub-label { margin-top: 1cqw; }
+  .bp-barcode { height: clamp(20px, 8cqw, 34px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-deck, .bp-pass { transition: none; }
+  .bp-pass.today .bp-stub-num { animation: none; }
+}
+
+/* Three-letter IATA fields — short, spaced out, and always upper case. The placeholder opts
+   out of that styling: it's either the code we already know or a plain "e.g." hint, and
+   shouting the hint in caps makes it read like a value that's been filled in. */
+.code-input {
+  width: 100%; max-width: 130px;
+  text-transform: uppercase; letter-spacing: 0.16em; font-weight: 600;
+}
+.code-input::placeholder { text-transform: none; letter-spacing: normal; font-weight: 400; }
 
 /* ---------- banners ---------- */
 .banner {

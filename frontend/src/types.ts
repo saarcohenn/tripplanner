@@ -42,6 +42,7 @@ export type Trip = {
   start_date: string | null;
   end_date: string | null;
   home_city: string;
+  home_airport: string;
   budget: number | null;
   currency: string;
   notes: string;
@@ -69,6 +70,7 @@ export type Leg = {
   seq: number;
   city: string;
   country: string;
+  airport: string;
   arrive_date: string | null;
   depart_date: string | null;
   lat: number | null;
