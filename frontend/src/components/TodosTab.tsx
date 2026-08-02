@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PartyPopper, Sparkles, X } from "lucide-react";
+import { PartyPopper, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../api";
 import type { Todo, TripDetail } from "../types";
 
@@ -34,22 +34,28 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
 
   function renderTodo(t: Todo) {
     return (
+      // Four stable children, so a phone can lay the row out as "task on top, its category
+      // and date underneath" — squeezed onto one line the task text lost to the controls.
       <div className={`todo${t.done ? " done" : ""}`} key={t.id}>
-        <input type="checkbox" checked={!!t.done} onChange={() => patch(t, { done: t.done ? 0 : 1 })} />
-        {t.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />}
+        <span className="todo-lead">
+          <input type="checkbox" checked={!!t.done} onChange={() => patch(t, { done: t.done ? 0 : 1 })} />
+          {t.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />}
+        </span>
         <input
-          dir="auto" className="subtle grow" defaultValue={t.text}
+          dir="auto" className="subtle todo-text" defaultValue={t.text}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           onBlur={(e) => e.target.value.trim() && e.target.value !== t.text && patch(t, { text: e.target.value })}
         />
-        <select className="subtle" value={t.category} onChange={(e) => patch(t, { category: e.target.value })}>
-          {CATS.map((c) => <option key={c}>{c}</option>)}
-        </select>
-        <input
-          type="date" className="subtle nowrap" defaultValue={t.due_date ?? ""}
-          onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
-        />
-        <button className="danger small" onClick={() => remove(t)} aria-label="Delete todo"><X size={13} /></button>
+        <span className="todo-meta">
+          <select className="subtle" value={t.category} onChange={(e) => patch(t, { category: e.target.value })}>
+            {CATS.map((c) => <option key={c}>{c}</option>)}
+          </select>
+          <input
+            type="date" className="subtle nowrap" defaultValue={t.due_date ?? ""}
+            onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
+          />
+        </span>
+        <button className="icon-del" onClick={() => remove(t)} aria-label={`Delete "${t.text}"`}><Trash2 size={15} /></button>
       </div>
     );
   }
