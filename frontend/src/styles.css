@@ -1455,13 +1455,11 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
 .drp-day.to { border-radius: 0 8px 8px 0; }
 .drp-day.sel:hover:not(:disabled) { background: var(--accent-dark); }
 
-@media (max-width: 768px) {
-  /* Two month grids don't fit a phone; the popover shows one and scrolls by month. */
-  .drp-months { gap: 0; }
-  .drp-month:not(:first-child) { display: none; }
-  .drp-pop { left: 0; right: 0; }
-  .drp-weekdays, .drp-grid { grid-template-columns: repeat(7, 1fr); }
-}
+/* No mobile overrides for the picker: how many month grids fit is a question about the
+   calendar's own width, not the viewport's shape, so the component decides it (see
+   TWO_MONTH_MIN). The old rules here hid the second month below 768px — which also hid it
+   on any desktop window narrower than that — and pinned the popover to both edges, which
+   since it became a fixed-position portal stretched it instead of sizing it to content. */
 
 /* ---------- wide screens ----------
    Past ~1400px a single column just stretches every field across the viewport while the

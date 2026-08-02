@@ -33,6 +33,14 @@ one month grid, no night count, first click commits and closes.
   endLabel="Depart"
   months={2}                       // month grids side by side, default 2
 />
+```
+
+`months` is a ceiling, not a promise: the component drops to one grid below
+`TWO_MONTH_MIN` (520px), where two 7-column grids genuinely don't fit. Don't
+add a media query for this — how many months fit is about the calendar's width,
+not the viewport's shape, and the component already owns it.
+
+```tsx
 
 <DatePicker
   value={todo.due_date}            // string | null
@@ -96,3 +104,15 @@ All of it lives under the `.drp*` prefix in `frontend/src/styles.css`
 tokens, so both themes and the focus ring come free. Don't add per-usage
 styles; if a usage needs something different, change the shared rules so every
 date field moves together.
+
+Two rules about the calendar specifically:
+
+- **It is rendered into `<body>` and positioned by the component**, so don't
+  give `.drp-pop` a `top`/`left`/`right` in CSS — an inline `left` plus a
+  stylesheet `right` stretches a fixed-position box instead of placing it. It
+  lives outside its field's subtree because `.pad` scrolls (making it a
+  horizontal clipping context) and cards like `.todo` carry fill-mode
+  animations (giving each its own stacking context), either of which would
+  swallow an absolutely-positioned calendar.
+- **Placement is fit-based, not breakpoint-based.** It flips left of the field
+  or above it as needed, and closes if its field scrolls out of view.

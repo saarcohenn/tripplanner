@@ -11,6 +11,14 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
  * constructed at midnight, so a value never shifts a day across timezones.
  */
 
+/**
+ * Narrowest window that fits two month grids side by side: two 7-column grids at 32px a
+ * column, the gap between them, the popover's padding, and a margin either side. Below
+ * this the second grid is dropped rather than squeezed — measured from the CSS, so keep
+ * the two in step if .drp-grid's column width or .drp-months' gap changes.
+ */
+const TWO_MONTH_MIN = 520;
+
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -70,7 +78,7 @@ export default function DateRangePicker({
   onChange: (start: string | null, end: string | null) => void;
   startLabel?: string;
   endLabel?: string;
-  /** How many month grids to show side by side (falls back to 1 on narrow screens). */
+  /** How many month grids to show side by side, capped at what fits — see TWO_MONTH_MIN. */
   months?: number;
   /**
    * One date instead of two: the first click commits and closes, and the night count and
@@ -87,6 +95,17 @@ export default function DateRangePicker({
   const wrapRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [wideEnough, setWideEnough] = useState(() => window.innerWidth >= TWO_MONTH_MIN);
+  // How many grids actually get drawn: what was asked for, unless there isn't room for it.
+  const shownMonths = wideEnough ? months : 1;
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${TWO_MONTH_MIN}px)`);
+    const sync = () => setWideEnough(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   const startDate = fromIso(start);
   const endDate = fromIso(end);
@@ -114,6 +133,9 @@ export default function DateRangePicker({
       const field = wrapRef.current?.getBoundingClientRect();
       const pop = popRef.current?.getBoundingClientRect();
       if (!field || !pop) return;
+      // Scrolled its field out of view: a fixed calendar would otherwise sail up over the
+      // header still faithfully anchored to something nobody can see.
+      if (field.bottom < 0 || field.top > window.innerHeight) { setOpen(false); return; }
       const left = field.left + pop.width > window.innerWidth - 12
         ? Math.max(12, field.right - pop.width)
         : field.left;
@@ -130,7 +152,7 @@ export default function DateRangePicker({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open, months]);
+  }, [open, shownMonths]);
 
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
@@ -231,7 +253,7 @@ export default function DateRangePicker({
           </div>
 
           <div className="drp-months" onMouseLeave={() => setHovered(null)}>
-            {Array.from({ length: months }, (_, i) => addMonths(viewMonth, i)).map((m) => (
+            {Array.from({ length: shownMonths }, (_, i) => addMonths(viewMonth, i)).map((m) => (
               <div className="drp-month" key={`${m.getFullYear()}-${m.getMonth()}`}>
                 <div className="drp-month-name">{MONTHS[m.getMonth()]} {m.getFullYear()}</div>
                 <div className="drp-weekdays">
