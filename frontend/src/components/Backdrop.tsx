@@ -117,47 +117,92 @@ function CityBlock() {
   );
 }
 
+const TILE_H = 700;
+
+type StalkSpec = {
+  x: number; w: number; bend: number; nodes: number[];
+  leafAt?: number[]; leafDir?: 1 | -1;
+};
+
 /**
- * One repeat of bamboo grove. Node rings sit at y=0 and y=700 as well as the interior
- * divisions, so the tile seam lands on a ring and reads as a continuous culm.
+ * One repeat of bamboo grove. Culms differ in thickness, how far they bow, and where their
+ * node rings fall — an evenly-divided column of identical rectangles read as scaffolding
+ * rather than plants. Rings sit at y=0 too, so the tile seam lands on one and the culm
+ * reads as continuous.
  */
 function BambooBlock({ side }: { side: "l" | "r" }) {
-  const stalks = side === "l"
-    ? [{ x: 18, w: 15, leaves: true }, { x: 74, w: 10, leaves: false }, { x: 128, w: 17, leaves: true }]
-    : [{ x: 26, w: 11, leaves: false }, { x: 82, w: 17, leaves: true }, { x: 148, w: 13, leaves: true }];
+  const stalks: StalkSpec[] = side === "l"
+    ? [
+        { x: 14, w: 16, bend: 11, nodes: [0, 148, 305, 430, 566], leafAt: [148, 430], leafDir: 1 },
+        { x: 70, w: 9, bend: -7, nodes: [0, 190, 352, 540], leafAt: [352], leafDir: -1 },
+        { x: 122, w: 19, bend: 6, nodes: [0, 132, 288, 462, 604], leafAt: [288, 604], leafDir: 1 },
+        { x: 172, w: 7, bend: -10, nodes: [0, 210, 398, 588] },
+      ]
+    : [
+        { x: 22, w: 11, bend: -9, nodes: [0, 168, 330, 512], leafAt: [330], leafDir: -1 },
+        { x: 76, w: 18, bend: 8, nodes: [0, 124, 276, 448, 620], leafAt: [124, 448], leafDir: 1 },
+        { x: 134, w: 8, bend: -6, nodes: [0, 200, 376, 560], leafAt: [560], leafDir: -1 },
+        { x: 178, w: 14, bend: 9, nodes: [0, 156, 320, 498, 640] },
+      ];
+  return <>{stalks.map((s) => <Stalk key={s.x} {...s} />)}</>;
+}
+
+/** How far the culm has bowed sideways at a given height — 0 at both seams, max mid-tile. */
+function bowAt(y: number, bend: number): number {
+  return bend * Math.sin((Math.PI * y) / TILE_H);
+}
+
+/**
+ * One bamboo culm. Drawn as a bowed band rather than a rectangle: the outline leaves and
+ * re-enters vertically at y=0 and y=700, so however far it bows in between, the tile still
+ * joins seamlessly top-to-bottom.
+ */
+function Stalk({ x, w, bend, nodes, leafAt = [], leafDir = 1 }: StalkSpec) {
+  const d = [
+    `M ${x},0`,
+    `C ${x},60 ${x + bend},130 ${x + bend},${TILE_H / 2}`,
+    `C ${x + bend},${TILE_H - 130} ${x},${TILE_H - 60} ${x},${TILE_H}`,
+    `L ${x + w},${TILE_H}`,
+    `C ${x + w},${TILE_H - 60} ${x + w + bend},${TILE_H - 130} ${x + w + bend},${TILE_H / 2}`,
+    `C ${x + w + bend},130 ${x + w},60 ${x + w},0`,
+    "Z",
+  ].join(" ");
+
   return (
-    <>
-      {stalks.map((s) => <Stalk key={s.x} x={s.x} width={s.w} leaves={s.leaves} />)}
-    </>
+    <g>
+      <path d={d} />
+      {nodes.map((y) => {
+        const off = bowAt(y, bend);
+        // Rings track the bow and tilt with the culm's local lean.
+        const lean = (bend * Math.cos((Math.PI * y) / TILE_H) * Math.PI) / TILE_H * 40;
+        return (
+          <rect
+            key={y} className="bamboo-node"
+            x={x + off - 2.5} y={y - 3.5} width={w + 5} height={7} rx={3.5}
+            transform={`rotate(${lean} ${x + off + w / 2} ${y})`}
+          />
+        );
+      })}
+      {leafAt.map((y) => (
+        <Leaves key={y} y={y} x={x + bowAt(y, bend)} w={w} dir={leafDir} />
+      ))}
+    </g>
   );
 }
 
-/** One bamboo culm: a column divided by node rings, optionally sprouting leaves. */
-function Stalk({ x, width, leaves }: { x: number; width: number; leaves: boolean }) {
-  const segments = 4;
-  const segH = 700 / segments;
-  // Includes 0 so the ring lands exactly on the tile seam.
-  const nodes = Array.from({ length: segments }, (_, i) => i * segH);
+/** A spray of three tapered leaves sprouting from a node, drooping at different angles. */
+function Leaves({ x, y, w, dir }: { x: number; y: number; w: number; dir: 1 | -1 }) {
+  const root = dir === 1 ? x + w : x;
+  // length, droop angle, thickness — deliberately uneven so the spray looks grown, not stamped
+  const blades: [number, number, number][] = [[46, -26, 7], [58, -4, 6], [38, 20, 5]];
   return (
-    <g>
-      <rect x={x} y={0} width={width} height={700} />
-      {nodes.map((y) => (
-        <rect key={y} className="bamboo-node" x={x - 2} y={y - 3} width={width + 4} height={6} rx={3} />
-      ))}
-      {leaves && nodes.slice(1, 3).map((y, i) => (
-        <g key={y} className="bamboo-leaf">
-          {/* alternate which side each leaf pair sprouts from */}
-          <ellipse
-            cx={i % 2 === 0 ? x + width + 26 : x - 26}
-            cy={y - 16} rx={30} ry={6}
-            transform={`rotate(${i % 2 === 0 ? -22 : 22} ${i % 2 === 0 ? x + width + 26 : x - 26} ${y - 16})`}
-          />
-          <ellipse
-            cx={i % 2 === 0 ? x + width + 18 : x - 18}
-            cy={y + 6} rx={22} ry={5}
-            transform={`rotate(${i % 2 === 0 ? -8 : 8} ${i % 2 === 0 ? x + width + 18 : x - 18} ${y + 6})`}
-          />
-        </g>
+    <g className="bamboo-leaf">
+      {blades.map(([len, angle, thick], i) => (
+        <path
+          key={i}
+          d={`M 0,0 Q ${len * 0.45},${-thick} ${len},0 Q ${len * 0.45},${thick} 0,0 Z`}
+          transform={`translate(${root} ${y}) scale(${dir} 1) rotate(${angle})`}
+        />
       ))}
     </g>
   );

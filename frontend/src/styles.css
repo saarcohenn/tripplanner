@@ -124,26 +124,39 @@ body {
   z-index: 0; pointer-events: none; overflow: hidden;
   opacity: var(--backdrop-opacity);
 }
-/* Fixed to the pattern's own tile height so the tiling grid stays aligned to the bottom. */
+/* Fixed to the pattern's own tile height so the tiling grid stays aligned to the bottom.
+   Sits furthest back: the bamboo is the nearer layer and overlaps it. (.backdrop has
+   opacity < 1, so it forms a stacking context — these negative values stay contained
+   inside it and can't slip behind the page background.) */
 .backdrop-city {
   position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 260px;
+  z-index: -100;
 }
 /* Over-sized and tilted ~5° off vertical (≈85°). The extra height covers the triangular
    gaps the rotation would otherwise leave at the top and bottom edges. */
 .backdrop-bamboo {
   position: absolute; top: -8%; height: 116%; width: min(15vw, 190px);
+  z-index: -90;
 }
+/* The right grove is the left one mirrored, so the two lean into each other symmetrically
+   instead of both raking the same way. */
 .backdrop-bamboo.left { left: 0; transform: rotate(-5deg); transform-origin: top left; }
-.backdrop-bamboo.right { right: 0; transform: rotate(5deg); transform-origin: top right; }
+.backdrop-bamboo.right {
+  right: 0; transform: scaleX(-1) rotate(-5deg); transform-origin: top right;
+}
 .city-far rect, .city-far polygon { fill: var(--art-far); }
 .city-mid rect, .city-mid polygon { fill: var(--art-mid); }
 .city-near rect, .city-near polygon { fill: var(--art-near); }
 /* Scoped to `pattern` descendants: the tiled <rect> that paints each layer carries
    fill="url(#…)", and a bare `.backdrop-bamboo rect` rule would override that with a
-   flat colour and wipe out the pattern. */
-.backdrop-bamboo pattern rect { fill: var(--art-mid); }
-.backdrop-bamboo pattern .bamboo-node { fill: var(--art-near); }
-.backdrop-bamboo pattern .bamboo-leaf ellipse { fill: var(--art-leaf); }
+   flat colour and wipe out the pattern.
+   Culms and leaves sit at the *far* end of the palette — the same range the distant
+   skyline uses — so the grove stays a background texture rather than competing with it.
+   (Leaves are <path>, not <ellipse>; without a rule matching them they'd inherit SVG's
+   default black fill, which is exactly what made them read as heavy.) */
+.backdrop-bamboo pattern path,
+.backdrop-bamboo pattern .bamboo-leaf path { fill: var(--art-far); }
+.backdrop-bamboo pattern .bamboo-node { fill: var(--art-mid); }
 
 /* The app chrome has to sit above the artwork. */
 .sidebar, .main { position: relative; z-index: 1; }
@@ -935,9 +948,12 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 @media (max-width: 768px) {
   .app { flex-direction: column; height: 100dvh; }
 
-  /* No gutter to show it in — the artwork would only sit behind text. */
-  .backdrop { display: none; }
-  /* (left inset is desktop-only anyway, since the sidebar becomes a top bar here) */
+  /* Phones have no gutter, so the full artwork would sit behind body text. Keep a single
+     narrow grove down one edge as a hint of it, and drop the skyline entirely. */
+  .backdrop { left: 0; opacity: calc(var(--backdrop-opacity) * 0.55); }
+  .backdrop-city { display: none; }
+  .backdrop-bamboo.left { display: none; }
+  .backdrop-bamboo.right { width: 84px; }
 
   /* Sidebar becomes a slim top bar: hamburger + "trip › page" breadcrumb.
      Brand, new-trip and the trip switcher all live in the drawer. */
@@ -1012,7 +1028,13 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
 /* Buttons and inline text that mix an icon with a label need the two baseline-aligned. */
 .btn-icon, .icon-line { display: inline-flex; align-items: center; gap: 6px; }
 .banner.icon-line, p.icon-line, h2.icon-line { display: flex; }
-.sidebar h1 { display: flex; align-items: center; gap: 7px; }
+/* The sidebar's brand is hidden on phones (the drawer carries it instead). This block sits
+   after the mobile media query, so scope the flex to desktop or it would override that
+   display:none and push the top bar wider than the viewport. */
+@media (min-width: 769px) {
+  .sidebar h1 { display: flex; align-items: center; gap: 7px; }
+}
+.drawer-head h1 { display: flex; align-items: center; gap: 7px; }
 .brand-mark { color: var(--accent); }
 .ai-mark { color: var(--accent); vertical-align: -0.1em; }
 .drawer-item { gap: 8px; }
@@ -1037,8 +1059,12 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
 
 /* ---------- date range picker ---------- */
 /* The range field carries two dates plus a nights badge, so it needs more room than a
-   single form-grid cell gives it. */
-.drp-label { grid-column: span 2; }
+   single form-grid cell gives it — but only once the grid actually has two columns to
+   span. Below that, `span 2` conjures a second column and overflows the page sideways.
+   (.form-grid is auto-fill minmax(190px, 1fr); two of those plus the gap need ~392px.) */
+@media (min-width: 440px) {
+  .drp-label { grid-column: span 2; }
+}
 .drp { position: relative; }
 .drp-field {
   display: flex; align-items: center; gap: 10px; width: 100%;
