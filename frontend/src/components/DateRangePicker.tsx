@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 /**
@@ -62,7 +63,7 @@ function monthGrid(month: Date): (Date | null)[] {
 }
 
 export default function DateRangePicker({
-  start, end, onChange, startLabel = "Start", endLabel = "End", months = 2,
+  start, end, onChange, startLabel = "Start", endLabel = "End", months = 2, single = false,
 }: {
   start: string | null;
   end: string | null;
@@ -71,12 +72,21 @@ export default function DateRangePicker({
   endLabel?: string;
   /** How many month grids to show side by side (falls back to 1 on narrow screens). */
   months?: number;
+  /**
+   * One date instead of two: the first click commits and closes, and the night count and
+   * range shading go away. Same field and same calendar, so a form that needs both kinds
+   * of date doesn't end up speaking two visual languages. Use the DatePicker wrapper below
+   * rather than passing this directly.
+   */
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // While picking, only the start is committed until a second click lands.
   const [pendingStart, setPendingStart] = useState<Date | null>(null);
   const [hovered, setHovered] = useState<Date | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const startDate = fromIso(start);
   const endDate = fromIso(end);
@@ -88,9 +98,45 @@ export default function DateRangePicker({
     if (open) setViewMonth(startOfMonth(fromIso(start) || new Date()));
   }, [open, start]);
 
+  /**
+   * The calendar is rendered into <body> and positioned against the field, because as an
+   * absolutely-positioned child it lost both ways: .pad scrolls vertically, which makes it
+   * a scroll container horizontally too, so an overhanging calendar was clipped and added a
+   * sideways scrollbar to the whole tab; and cards like .todo carry a fill-mode animation,
+   * which gives each its own stacking context, so a later sibling painted over a calendar
+   * opened from an earlier one regardless of z-index.
+   *
+   * Flips to the left of the field, or above it, rather than hanging off either edge.
+   */
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    function place() {
+      const field = wrapRef.current?.getBoundingClientRect();
+      const pop = popRef.current?.getBoundingClientRect();
+      if (!field || !pop) return;
+      const left = field.left + pop.width > window.innerWidth - 12
+        ? Math.max(12, field.right - pop.width)
+        : field.left;
+      const top = field.bottom + 6 + pop.height > window.innerHeight - 12
+        ? Math.max(12, field.top - pop.height - 6)
+        : field.bottom + 6;
+      setPos({ top, left });
+    }
+    place();
+    window.addEventListener("resize", place);
+    // Capture phase, so it follows the field when any ancestor scrolls, not just the window.
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, months]);
+
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      const inside = wrapRef.current?.contains(t) || popRef.current?.contains(t);
+      if (!inside) {
         setOpen(false);
         setPendingStart(null);
       }
@@ -108,14 +154,20 @@ export default function DateRangePicker({
 
   // The range being drawn right now: either the committed one, or start→cursor mid-pick.
   const [rangeFrom, rangeTo] = useMemo<[Date | null, Date | null]>(() => {
+    if (single) return [startDate, startDate];
     if (pendingStart) {
       if (!hovered) return [pendingStart, pendingStart];
       return hovered < pendingStart ? [hovered, pendingStart] : [pendingStart, hovered];
     }
     return [startDate, endDate];
-  }, [pendingStart, hovered, startDate, endDate]);
+  }, [single, pendingStart, hovered, startDate, endDate]);
 
   function pick(day: Date) {
+    if (single) {
+      onChange(toIso(day), null);
+      setOpen(false);
+      return;
+    }
     if (!pendingStart) {
       setPendingStart(day);
       return;
@@ -134,9 +186,9 @@ export default function DateRangePicker({
     setPendingStart(null);
   }
 
-  const nights = startDate && endDate ? nightsBetween(startDate, endDate) : null;
+  const nights = !single && startDate && endDate ? nightsBetween(startDate, endDate) : null;
   const summary = startDate
-    ? `${fmtShort(startDate)}${endDate ? `  →  ${fmtShort(endDate)}` : ""}`
+    ? single ? fmtShort(startDate) : `${fmtShort(startDate)}${endDate ? `  →  ${fmtShort(endDate)}` : ""}`
     : "";
 
   return (
@@ -149,7 +201,9 @@ export default function DateRangePicker({
         aria-expanded={open}
       >
         <span className="drp-value">
-          {summary || <span className="drp-placeholder">{startLabel} → {endLabel}</span>}
+          {summary || (
+            <span className="drp-placeholder">{single ? startLabel : `${startLabel} → ${endLabel}`}</span>
+          )}
         </span>
         {nights != null && nights > 0 && (
           <span className="drp-nights">{nights} {nights === 1 ? "night" : "nights"}</span>
@@ -160,12 +214,17 @@ export default function DateRangePicker({
       </button>
 
       {open && (
-        <div className="drp-pop" role="dialog" aria-label="Choose dates">
+        createPortal(
+          // Parked off-screen until measured; that happens before paint, so there's no flash.
+          <div
+            className="drp-pop" ref={popRef} role="dialog" aria-label="Choose dates"
+            style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}
+          >
           <div className="drp-head">
             <button type="button" className="drp-nav" aria-label="Previous month"
               onClick={() => setViewMonth((m) => addMonths(m, -1))}><ChevronLeft size={16} /></button>
             <div className="drp-hint">
-              {pendingStart ? "Now pick the end date" : "Pick the start date"}
+              {single ? startLabel : pendingStart ? "Now pick the end date" : "Pick the start date"}
             </div>
             <button type="button" className="drp-nav" aria-label="Next month"
               onClick={() => setViewMonth((m) => addMonths(m, 1))}><ChevronRight size={16} /></button>
@@ -204,8 +263,27 @@ export default function DateRangePicker({
               </div>
             ))}
           </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        ))}
     </div>
+  );
+}
+
+/**
+ * One date, same field and same calendar as the range picker above. A thin wrapper rather
+ * than a second component so there is exactly one place where a date gets picked in this
+ * app — see .claude/skills/date-fields.
+ */
+export function DatePicker({ value, onChange, label = "Pick a date" }: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  label?: string;
+}) {
+  return (
+    <DateRangePicker
+      single months={1} start={value} end={null} startLabel={label}
+      onChange={(v) => onChange(v)}
+    />
   );
 }

@@ -8,6 +8,7 @@ import { api } from "../api";
 import { citySlug, countryCode } from "../countries";
 import type { Booking, Leg, Trip, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
+import DateRangePicker from "./DateRangePicker";
 import { AgodaMark, AirbnbMark, BookingMark, ExpediaMark, GoogleMark, SkyscannerMark } from "./ProviderIcons";
 import { fmtMoney } from "../currencies";
 
@@ -134,11 +135,12 @@ function FlightFinder({ trip, legs }: { trip: Trip; legs: Leg[] }) {
         <label className="block">To
           <input dir="ltr" placeholder="City or airport code" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
-        <label className="block">Depart
-          <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} />
-        </label>
-        <label className="block">Return
-          <input type="date" value={ret} onChange={(e) => setRet(e.target.value)} />
+        <label className="block drp-span">Dates
+          <DateRangePicker
+            start={depart || null} end={ret || null}
+            startLabel="Depart" endLabel="Return"
+            onChange={(d, r) => { setDepart(d || ""); setRet(r || ""); }}
+          />
         </label>
       </div>
       <div className="provider-links">
@@ -261,8 +263,13 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
           <option value="">Trip-wide</option>
           {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
         </select>
-        <input type="date" title="Date / check-in" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        <input type="date" title="Check-out" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+        <div className="b-dates">
+          <DateRangePicker
+            start={form.date || null} end={form.end_date || null}
+            startLabel="Check in" endLabel="Check out"
+            onChange={(d, e) => setForm({ ...form, date: d || "", end_date: e || "" })}
+          />
+        </div>
         <input type="number" placeholder="Cost" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
         <CurrencySelect value={form.currency} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} />
         <button className="fab-add" onClick={add} aria-label="Add booking" title="Add booking"><Plus size={18} /></button>
@@ -305,13 +312,14 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
                   <input dir="auto" placeholder="Notes about this booking…" defaultValue={b.notes}
                     onBlur={(e) => e.target.value !== b.notes && patch(b, { notes: e.target.value })} />
                 </label>
+                <label className="block">Dates
+                  <DateRangePicker
+                    start={b.date} end={b.end_date}
+                    startLabel="Check in" endLabel="Check out"
+                    onChange={(d, e) => patch(b, { date: d, end_date: e })}
+                  />
+                </label>
                 <div className="row wrap">
-                  <label className="block">Date / check-in
-                    <input type="date" defaultValue={b.date ?? ""} onBlur={(e) => e.target.value !== (b.date ?? "") && patch(b, { date: e.target.value || null })} />
-                  </label>
-                  <label className="block">Check-out
-                    <input type="date" defaultValue={b.end_date ?? ""} onBlur={(e) => e.target.value !== (b.end_date ?? "") && patch(b, { end_date: e.target.value || null })} />
-                  </label>
                   <label className="block">Cost
                     <div className="row">
                       <input type="number" style={{ width: 100 }} defaultValue={b.cost ?? ""}

@@ -1388,6 +1388,21 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
   .drp-label { grid-column: span 2; }
 }
 .drp { position: relative; }
+/* Placement of the field where it replaced a pair of native inputs. Sizing only — the field
+   itself is identical everywhere, which is the point of it being one component. */
+.b-dates { grid-column: span 2; min-width: 0; }
+/* Two columns' worth in the finder's grid, since it replaced two fields there too. Not
+   below the width where that grid drops to one column, or the span conjures a second. */
+@media (min-width: 341px) {
+  .drp-span { grid-column: span 2; }
+}
+@media (min-width: 1201px) {
+  /* Past here .booking-add is one flex line; the range field needs more of it than a
+     single-value control would. */
+  .b-dates { flex: 1.4 1 210px; }
+}
+.todo-add-date, .todo-meta .drp { flex: 1 1 150px; min-width: 0; }
+
 .drp-field {
   display: flex; align-items: center; gap: 10px; width: 100%;
   background: var(--card); color: var(--text); border: 1px solid var(--border-strong);
@@ -1404,8 +1419,10 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
 .drp-clear { flex: 0 0 auto; color: var(--muted); font-size: 12px; padding: 0 2px; cursor: pointer; }
 .drp-clear:hover { color: var(--danger); }
 
+/* Fixed, and rendered into <body> — see the placement note in DateRangePicker.tsx. The
+   component sets top/left; everything here is just the surface. */
 .drp-pop {
-  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
+  position: fixed; z-index: 60;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow-lg); padding: 12px; animation: pop 0.18s var(--ease-out) both;
 }

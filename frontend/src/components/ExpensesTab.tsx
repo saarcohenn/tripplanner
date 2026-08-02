@@ -6,6 +6,7 @@ import {
 import { api } from "../api";
 import type { Expense, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
+import { DatePicker } from "./DateRangePicker";
 import DonutChart, { type Slice } from "./DonutChart";
 import { fmtMoney } from "../currencies";
 
@@ -193,7 +194,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
         {/* Date sits before category/city so the wide-screen grid pairs it with Amount
             rather than stranding it under the full-width pair below. */}
         <label className="block">Date
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <DatePicker value={form.date || null} label="When?" onChange={(v) => setForm({ ...form, date: v || "" })} />
         </label>
         <div className="two-col">
           <label className="block">Category
@@ -253,7 +254,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
                     </label>
                   </div>
                   <label className="block">Date
-                    <input type="date" defaultValue={e.date ?? ""} onBlur={(ev) => ev.target.value !== (e.date ?? "") && patch(e, { date: ev.target.value || null })} />
+                    <DatePicker value={e.date} label="When?" onChange={(v) => patch(e, { date: v })} />
                   </label>
                   <label className="block">Notes
                     <input dir="auto" placeholder="Optional notes…" defaultValue={e.notes}

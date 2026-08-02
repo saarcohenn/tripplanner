@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { PartyPopper, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../api";
 import type { Todo, TripDetail } from "../types";
+import { DatePicker } from "./DateRangePicker";
 
 const CATS = ["general", "booking", "documents", "packing", "money"];
 
@@ -71,10 +72,7 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
           <select className="subtle" value={t.category} onChange={(e) => patch(t, { category: e.target.value })}>
             {CATS.map((c) => <option key={c}>{c}</option>)}
           </select>
-          <input
-            type="date" className="subtle nowrap" defaultValue={t.due_date ?? ""}
-            onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
-          />
+          <DatePicker value={t.due_date} label="Due date" onChange={(v) => patch(t, { due_date: v })} />
         </span>
 
         <span className="todo-actions">
@@ -100,7 +98,9 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
         <select className="todo-add-cat" value={cat} onChange={(e) => setCat(e.target.value)}>
           {CATS.map((c) => <option key={c}>{c}</option>)}
         </select>
-        <input type="date" className="todo-add-date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <span className="todo-add-date">
+          <DatePicker value={due || null} label="Due date" onChange={(v) => setDue(v || "")} />
+        </span>
         <button className="fab-add" onClick={add} aria-label="Add todo" title="Add todo"><Plus size={18} /></button>
       </div>
 
