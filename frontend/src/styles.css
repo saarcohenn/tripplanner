@@ -224,10 +224,10 @@ body {
   background: var(--shared-tint); color: var(--shared); margin-left: 19px;
   max-width: calc(100% - 19px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* Ghost delete button — a bordered ✕ reads as heavy as the row it sits in, and competes
-   with the content for attention. .icon-del is the same treatment anywhere a row's delete
-   is an icon rather than a labelled button; .trip-del adds the hide-until-hover below. */
-.trip-del, .icon-del {
+/* Ghost row buttons — a bordered control reads as heavy as the row it sits in and competes
+   with the content for attention. One base treatment, two hovers: .icon-del/.trip-del go
+   danger, .icon-edit stays neutral. .trip-del adds the hide-until-hover below. */
+.trip-del, .icon-del, .icon-edit {
   flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: none; border: none; box-shadow: none; border-radius: 8px;
@@ -236,6 +236,10 @@ body {
 }
 .trip-del:hover:not(:disabled), .icon-del:hover:not(:disabled) {
   background: var(--danger-tint); color: var(--danger); border: none; box-shadow: none;
+  transform: none;
+}
+.icon-edit:hover:not(:disabled) {
+  background: var(--card-tint); color: var(--accent-dark); border: none; box-shadow: none;
   transform: none;
 }
 /* Only hide-until-hover where hovering exists — on touch there'd be no way to reveal it. */
@@ -646,25 +650,61 @@ a { color: var(--accent-dark); }
 .todo input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 .todo-lead { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .todo-meta { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-/* The task is the row's content, not its metadata: it keeps the borderless chrome of a
-   .subtle field but not its muted colour or small size, so it doesn't read as quieter than
-   its own category and due date. Needs to out-specify input.subtle, which is set later. */
-.todo input.todo-text { flex: 1 1 auto; min-width: 0; color: var(--text); font-size: 13px; }
+.todo-actions { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+/* The task is the row's content, not its metadata, so it takes the normal text colour and
+   a size above its own category and due date. Plain text rather than a field: it wraps to
+   as many lines as it needs instead of clipping at the edge of an input. */
+.todo-text {
+  flex: 1 1 auto; min-width: 0; color: var(--text); font-size: 13px;
+  overflow-wrap: anywhere; cursor: text;
+}
+/* Edit mode borrows the field styling but keeps the task's size, so the row doesn't jump. */
+.todo input.todo-text-input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 4px 8px; }
 
-@media (max-width: 700px) {
-  /* One line can't hold the task and its two controls — the task loses, which left the row
-     showing a category and a date for something you couldn't read. Give the task the full
-     top line and drop its metadata underneath. */
+/* A narrow row can't hold the task and its two controls on one line — the task loses,
+   which left the row showing a category and a date for something you couldn't read. Give
+   the task the full top line and drop its metadata underneath.
+
+   Narrow happens at both ends: a phone, and a wide screen where .todo-list-wide flows the
+   list into 2-3 columns of ~470px each. In between, the list is one wide column and the
+   row fits on a single line, so it stays there. */
+@media (max-width: 700px), (min-width: 1400px) {
   .todo {
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
     column-gap: 10px; row-gap: 6px; padding: 10px 12px;
+    align-items: start;
   }
-  .todo-lead { grid-area: 1 / 1; }
-  .todo input.todo-text { grid-area: 1 / 2; font-size: 14px; }
-  .todo > .icon-del { grid-area: 1 / 3; width: 32px; height: 32px; }
+  .todo-lead { grid-area: 1 / 1; padding-top: 3px; }
+  .todo-text, .todo input.todo-text-input { grid-area: 1 / 2; font-size: 14px; }
+  .todo-actions { grid-area: 1 / 3; }
+  .todo-actions > * { width: 32px; height: 32px; }
   .todo-meta { grid-area: 2 / 1 / 2 / -1; }
   /* Share the second line evenly rather than letting the date input claim it. */
   .todo-meta > * { flex: 1 1 0; min-width: 0; }
+}
+
+/* Round + button for the todo add-row. Scoped to .todo-add: the other add-rows on the
+   Places/Bookings/Expenses tabs keep their labelled buttons. */
+.fab-add {
+  flex: 0 0 auto; width: 38px; height: 38px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  box-shadow: var(--accent-glow);
+}
+.fab-add:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
+
+@media (max-width: 700px) {
+  /* Flex-wrapping left the four controls landing wherever they fit and never lining up.
+     A grid gives the task its own full-width line with the category, date and + button
+     sharing the one below, all on a common baseline. */
+  .todo-add {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px; align-items: center;
+  }
+  .todo-add-text { grid-area: 1 / 1 / 1 / -1; min-width: 0; }
+  .todo-add-cat { grid-area: 2 / 1; min-width: 0; }
+  .todo-add-date { grid-area: 2 / 2; min-width: 0; }
+  .fab-add { grid-area: 2 / 3; }
 }
 
 /* ---------- map (lives at the top of the Places tab) ----------

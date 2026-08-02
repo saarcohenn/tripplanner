@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { PartyPopper, Sparkles, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { PartyPopper, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../api";
 import type { Todo, TripDetail } from "../types";
 
@@ -10,6 +10,9 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
   const [text, setText] = useState("");
   const [cat, setCat] = useState("general");
   const [due, setDue] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  // Set by Escape so the blur that follows knows to discard rather than save.
+  const cancelled = useRef(false);
 
   async function add() {
     if (!text.trim()) return;
@@ -33,19 +36,37 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
   const done = todos.filter((t) => t.done);
 
   function renderTodo(t: Todo) {
+    const editing = editId === t.id;
     return (
-      // Four stable children, so a phone can lay the row out as "task on top, its category
-      // and date underneath" — squeezed onto one line the task text lost to the controls.
+      // Four stable children — lead, task, metadata, actions — so a phone can lay the row
+      // out as "task on top, its category and date underneath" without the optional AI mark
+      // shifting anything.
       <div className={`todo${t.done ? " done" : ""}`} key={t.id}>
         <span className="todo-lead">
           <input type="checkbox" checked={!!t.done} onChange={() => patch(t, { done: t.done ? 0 : 1 })} />
           {t.source === "ai" && <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />}
         </span>
-        <input
-          dir="auto" className="subtle todo-text" defaultValue={t.text}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          onBlur={(e) => e.target.value.trim() && e.target.value !== t.text && patch(t, { text: e.target.value })}
-        />
+
+        {/* Plain text until you ask to edit it: an input can only ever show one clipped line,
+            and the task is the one thing in the row that has to be readable in full. */}
+        {editing ? (
+          <input
+            dir="auto" className="todo-text-input" defaultValue={t.text} autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              else if (e.key === "Escape") { cancelled.current = true; setEditId(null); }
+            }}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              setEditId(null);
+              if (cancelled.current) { cancelled.current = false; return; }
+              if (v && v !== t.text) void patch(t, { text: v });
+            }}
+          />
+        ) : (
+          <span className="todo-text" dir="auto" onDoubleClick={() => setEditId(t.id)}>{t.text}</span>
+        )}
+
         <span className="todo-meta">
           <select className="subtle" value={t.category} onChange={(e) => patch(t, { category: e.target.value })}>
             {CATS.map((c) => <option key={c}>{c}</option>)}
@@ -55,7 +76,15 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
             onBlur={(e) => e.target.value !== (t.due_date ?? "") && patch(t, { due_date: e.target.value || null })}
           />
         </span>
-        <button className="icon-del" onClick={() => remove(t)} aria-label={`Delete "${t.text}"`}><Trash2 size={15} /></button>
+
+        <span className="todo-actions">
+          <button className="icon-edit" onClick={() => setEditId(t.id)} aria-label={`Edit "${t.text}"`}>
+            <Pencil size={14} />
+          </button>
+          <button className="icon-del" onClick={() => remove(t)} aria-label={`Delete "${t.text}"`}>
+            <Trash2 size={15} />
+          </button>
+        </span>
       </div>
     );
   }
@@ -63,12 +92,16 @@ export default function TodosTab({ detail, refresh }: { detail: TripDetail; refr
   return (
     <div className="pad narrow">
       <h2>Todo list</h2>
-      <div className="add-row">
-        <input dir="auto" placeholder="e.g. Book Airbnb in Kyoto" value={text}
-          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-        <select value={cat} onChange={(e) => setCat(e.target.value)}>{CATS.map((c) => <option key={c}>{c}</option>)}</select>
-        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-        <button className="primary" onClick={add}>Add</button>
+      <div className="add-row todo-add">
+        <input
+          dir="auto" className="todo-add-text" placeholder="e.g. Book Airbnb in Kyoto" value={text}
+          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
+        />
+        <select className="todo-add-cat" value={cat} onChange={(e) => setCat(e.target.value)}>
+          {CATS.map((c) => <option key={c}>{c}</option>)}
+        </select>
+        <input type="date" className="todo-add-date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <button className="fab-add" onClick={add} aria-label="Add todo" title="Add todo"><Plus size={18} /></button>
       </div>
 
       <div className="todo-list-wide">{open.map(renderTodo)}</div>
