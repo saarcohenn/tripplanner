@@ -620,6 +620,27 @@ a { color: var(--accent-dark); }
    and get forced to 180px wide regardless of the grid column's real width. Override it. */
 .leg-add-row .two-col input:first-child { min-width: 0; }
 
+/* ---------- booking provider links ---------- */
+/* Providers wrap inside one cell instead of taking a column each, so adding a third didn't
+   push the stay table into a sideways scroll on a phone. */
+.provider-links { display: flex; flex-wrap: wrap; gap: 6px; }
+/* A provider we can't build a working link for: shown so it's clear it exists, but inert,
+   with the title saying what's missing. */
+.linkbtn.disabled {
+  color: var(--placeholder); border-color: var(--border);
+  cursor: not-allowed; box-shadow: none; user-select: none;
+}
+.finder {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 14px; margin: 10px 0 22px;
+}
+.finder-fields {
+  display: grid; gap: 10px; margin-bottom: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.finder-fields > * { min-width: 0; }
+.finder .hint { margin-bottom: 0; }
+
 .alert {
   background: var(--card); border: 1px solid var(--border);
   border-left: 4px solid var(--warn); box-shadow: var(--shadow);

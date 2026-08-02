@@ -3,8 +3,10 @@ import {
   Bus, Car, ChevronDown, ChevronRight, Globe, Hotel, Pin, Plane, Ship, Sparkles,
   Ticket, TrainFront,
 } from "lucide-react";
+import { airportCode } from "../airports";
 import { api } from "../api";
-import type { Booking, Leg, TripDetail } from "../types";
+import { citySlug, countryCode } from "../countries";
+import type { Booking, Leg, Trip, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
 import { fmtMoney } from "../currencies";
 
@@ -27,6 +29,114 @@ function airbnbUrl(leg: Leg) {
   if (leg.depart_date) p.set("checkout", leg.depart_date);
   const q = p.toString();
   return `https://www.airbnb.com/s/${encodeURIComponent(`${leg.city}${leg.country ? `--${leg.country}` : ""}`)}/homes${q ? `?${q}` : ""}`;
+}
+
+/**
+ * Agoda has no free-text search URL — only per-city landing pages keyed by slug and ISO
+ * country code, and an unrecognised slug 404s instead of falling back to a search. So this
+ * returns null unless the leg's country resolves, and the link is left out rather than
+ * offered as something that might dead-end.
+ */
+function agodaUrl(leg: Leg): string | null {
+  const cc = countryCode(leg.country);
+  const slug = citySlug(leg.city);
+  if (!cc || !slug) return null;
+  const p = new URLSearchParams();
+  if (leg.arrive_date) p.set("checkIn", leg.arrive_date);
+  if (leg.depart_date) p.set("checkOut", leg.depart_date);
+  const q = p.toString();
+  return `https://www.agoda.com/city/${slug}-${cc}.html${q ? `?${q}` : ""}`;
+}
+
+/** Google Flights takes a plain-language query, so it works with city names or codes. */
+function googleFlightsUrl(from: string, to: string, depart: string, ret: string): string {
+  const parts = [`Flights from ${from} to ${to}`];
+  if (depart) parts.push(ret ? `on ${depart} through ${ret}` : `on ${depart} one way`);
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(parts.join(" "))}`;
+}
+
+/** Skyscanner's path form: /transport/flights/<from>/<to>/<yymmdd>[/<yymmdd>]. */
+function skyscannerUrl(from: string, to: string, depart: string, ret: string): string {
+  const ymd = (iso: string) => iso.slice(2).replace(/-/g, "");
+  const segs = [from.toLowerCase(), to.toLowerCase()];
+  if (depart) segs.push(ymd(depart));
+  if (depart && ret) segs.push(ymd(ret));
+  return `https://www.skyscanner.net/transport/flights/${segs.join("/")}/`;
+}
+
+function expediaUrl(from: string, to: string, depart: string, ret: string): string {
+  const p = new URLSearchParams();
+  p.set("trip", ret ? "roundtrip" : "oneway");
+  p.set("leg1", `from:${from},to:${to},departure:${depart}TANYT`);
+  if (ret) p.set("leg2", `from:${to},to:${from},departure:${ret}TANYT`);
+  p.set("passengers", "adults:1");
+  p.set("mode", "search");
+  return `https://www.expedia.com/Flights-Search?${p.toString()}`;
+}
+
+/**
+ * Flight search that stands on its own: it's the first thing you need when starting a trip,
+ * which is exactly when there are no legs and no dates to read them from yet. The fields
+ * pre-fill from the trip when it has something to offer and are editable regardless.
+ *
+ * Skyscanner and Expedia address airports by code, so they're only offered once both ends
+ * resolve to one — via airports.ts or whatever you typed on the leg. Google Flights takes
+ * plain language, so it always works.
+ */
+function FlightFinder({ trip, legs }: { trip: Trip; legs: Leg[] }) {
+  const firstLeg = legs[0];
+  const [from, setFrom] = useState(trip.home_airport || trip.home_city || "");
+  const [to, setTo] = useState(firstLeg ? firstLeg.airport || firstLeg.city : "");
+  const [depart, setDepart] = useState(firstLeg?.arrive_date || trip.start_date || "");
+  const [ret, setRet] = useState(trip.trip_type === "round" ? trip.end_date || "" : "");
+
+  const fromCode = airportCode(from, "", from);
+  const toCode = airportCode(to, "", to);
+  const ready = from.trim() !== "" && to.trim() !== "";
+  const coded = ready && fromCode != null && toCode != null;
+  const dated = depart !== "";
+
+  return (
+    <div className="finder">
+      <div className="finder-fields">
+        <label className="block">From
+          <input dir="ltr" placeholder="City or airport code" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="block">To
+          <input dir="ltr" placeholder="City or airport code" value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <label className="block">Depart
+          <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} />
+        </label>
+        <label className="block">Return
+          <input type="date" value={ret} onChange={(e) => setRet(e.target.value)} />
+        </label>
+      </div>
+      <div className="provider-links">
+        {ready ? (
+          <a className="linkbtn" href={googleFlightsUrl(from, to, depart, ret)} target="_blank" rel="noreferrer">Google Flights ↗</a>
+        ) : (
+          <span className="linkbtn disabled" title="Fill in where you're flying from and to">Google Flights</span>
+        )}
+        {coded && dated ? (
+          <a className="linkbtn" href={skyscannerUrl(fromCode!, toCode!, depart, ret)} target="_blank" rel="noreferrer">Skyscanner ↗</a>
+        ) : (
+          <span className="linkbtn disabled" title={coded ? "Pick a departure date" : "Needs an airport code at both ends"}>Skyscanner</span>
+        )}
+        {coded && dated ? (
+          <a className="linkbtn" href={expediaUrl(fromCode!, toCode!, depart, ret)} target="_blank" rel="noreferrer">Expedia ↗</a>
+        ) : (
+          <span className="linkbtn disabled" title={coded ? "Pick a departure date" : "Needs an airport code at both ends"}>Expedia</span>
+        )}
+      </div>
+      <p className="hint">
+        {coded
+          ? `Searching ${fromCode} → ${toCode}${ret ? " return" : depart ? " one way" : ""}.`
+          : "Skyscanner and Expedia need a three-letter airport code at both ends — type one above, or set it on the leg in Overview. Google Flights works with plain city names."}
+        {" "}Book wherever you like, then add the flight below to keep it in the plan.
+      </p>
+    </div>
+  );
 }
 
 export default function BookingsTab({ detail, refresh, homeCurrency }: {
@@ -84,19 +194,33 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
 
   return (
     <div className="pad">
+      <h2 className="icon-line"><Plane size={16} /> Find a flight</h2>
+      <FlightFinder trip={trip} legs={legs} />
+
       <h2>Find a stay</h2>
-      <p className="hint">Opens Booking.com / Airbnb pre-filled with each city and your leg dates. Paste the reservation back below once you book.</p>
+      <p className="hint">Opens Booking.com / Airbnb / Agoda pre-filled with each city and your leg dates. Paste the reservation back below once you book.</p>
       <table className="table">
         <tbody>
-          {legs.map((l) => (
-            <tr key={l.id}>
-              <td dir="auto"><strong>{l.city}</strong> <span className="hint">{l.arrive_date} → {l.depart_date}</span></td>
-              <td><a className="linkbtn" href={bookingUrl(l)} target="_blank" rel="noreferrer">Booking.com ↗</a></td>
-              <td><a className="linkbtn" href={airbnbUrl(l)} target="_blank" rel="noreferrer">Airbnb ↗</a></td>
-            </tr>
-          ))}
+          {legs.map((l) => {
+            const agoda = agodaUrl(l);
+            return (
+              <tr key={l.id}>
+                <td dir="auto"><strong>{l.city}</strong> <span className="hint">{l.arrive_date} → {l.depart_date}</span></td>
+                <td>
+                  {/* One wrapping cell rather than a column per provider — a fourth column
+                      would push the table into a sideways scroll on a phone. */}
+                  <div className="provider-links">
+                    <a className="linkbtn" href={bookingUrl(l)} target="_blank" rel="noreferrer">Booking.com ↗</a>
+                    <a className="linkbtn" href={airbnbUrl(l)} target="_blank" rel="noreferrer">Airbnb ↗</a>
+                    {agoda && <a className="linkbtn" href={agoda} target="_blank" rel="noreferrer">Agoda ↗</a>}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      {legs.length === 0 && <p className="hint">Add a city in Overview and its stay links show up here.</p>}
 
       <h2>
         Bookings
