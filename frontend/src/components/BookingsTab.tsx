@@ -233,10 +233,13 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
             const agoda = agodaUrl(l);
             return (
               <tr key={l.id}>
-                <td dir="auto"><strong>{l.city}</strong> <span className="hint">{l.arrive_date} → {l.depart_date}</span></td>
-                <td>
-                  {/* One wrapping cell rather than a column per provider — a fourth column
-                      would push the table into a sideways scroll on a phone. */}
+                <td dir="auto">
+                  <strong>{l.city}</strong>
+                  <div className="stay-dates hint">{l.arrive_date} → {l.depart_date}</div>
+                </td>
+                <td className="stay-links">
+                  {/* One cell rather than a column per provider — a fourth column would push
+                      the table into a sideways scroll on a phone. */}
                   <div className="provider-links">
                     <ProviderLink p={PROVIDERS.booking} url={bookingUrl(l)} />
                     <ProviderLink p={PROVIDERS.airbnb} url={airbnbUrl(l)} />

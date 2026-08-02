@@ -651,6 +651,13 @@ a { color: var(--accent-dark); }
 /* Providers wrap inside one cell instead of taking a column each, so a third one didn't
    push the stay table into a sideways scroll on a phone. */
 .provider-links { display: flex; flex-wrap: wrap; gap: 2px; }
+/* Stay table: the city gets the line, its dates sit under it. Together on one line they
+   squeezed the providers' cell until three marks wrapped onto two rows; given its own
+   width that cell holds all three, so they line up across every row. */
+.stay-dates { margin-top: 2px; }
+.stay-links { width: 1%; white-space: nowrap; }
+.stay-links .provider-links { flex-wrap: nowrap; justify-content: flex-end; }
+
 /* Borderless: six of these on a page read as a wall of boxes when each is a bordered
    button, and the coloured mark already says "this is a link to somewhere else". */
 .plink {
