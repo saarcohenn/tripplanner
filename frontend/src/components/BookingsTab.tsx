@@ -8,6 +8,7 @@ import { api } from "../api";
 import { citySlug, countryCode } from "../countries";
 import type { Booking, Leg, Trip, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
+import { AgodaMark, AirbnbMark, BookingMark, ExpediaMark, GoogleMark, SkyscannerMark } from "./ProviderIcons";
 import { fmtMoney } from "../currencies";
 
 const KINDS = ["flight", "stay", "train", "bus", "ferry", "car", "activity", "other"];
@@ -74,26 +75,23 @@ function expediaUrl(from: string, to: string, depart: string, ret: string): stri
   return `https://www.expedia.com/Flights-Search?${p.toString()}`;
 }
 
-/**
- * Each provider's own colour, used only as an identifying tint behind its initial. These
- * are approximations of the brands' primary colours, not their logos — enough to tell six
- * links apart at a glance without shipping anyone's artwork or fetching a favicon from a
- * third party, which this app never does.
- */
+/** Marks live in ProviderIcons.tsx, which documents which are real logos and which aren't. */
 const PROVIDERS = {
-  booking: { name: "Booking.com", short: "B.", color: "#003580" },
-  airbnb: { name: "Airbnb", short: "A", color: "#ff5a5f" },
-  agoda: { name: "Agoda", short: "ag", color: "#5b4cdb" },
-  google: { name: "Google Flights", short: "G", color: "#4285f4" },
-  skyscanner: { name: "Skyscanner", short: "sky", color: "#0770e3" },
-  expedia: { name: "Expedia", short: "E", color: "#00355f" },
+  booking: { name: "Booking.com", Mark: BookingMark },
+  airbnb: { name: "Airbnb", Mark: AirbnbMark },
+  agoda: { name: "Agoda", Mark: AgodaMark },
+  google: { name: "Google Flights", Mark: GoogleMark },
+  skyscanner: { name: "Skyscanner", Mark: SkyscannerMark },
+  expedia: { name: "Expedia", Mark: ExpediaMark },
 } as const;
 
+type ProviderSpec = { name: string; Mark: (props: { size?: number }) => JSX.Element };
+
 /** Borderless provider link. `url` of null renders it inert, with `hint` saying why. */
-function ProviderLink({ p, url, hint }: { p: { name: string; short: string; color: string }; url: string | null; hint?: string }) {
+function ProviderLink({ p, url, hint }: { p: ProviderSpec; url: string | null; hint?: string }) {
   const body = (
     <>
-      <span className="pmark" style={{ background: p.color }} aria-hidden="true">{p.short}</span>
+      <span className="pmark"><p.Mark size={18} /></span>
       <span className="pname">{p.name}</span>
     </>
   );
