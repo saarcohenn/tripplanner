@@ -6,6 +6,7 @@ import {
 import { api } from "../api";
 import type { Expense, TripDetail } from "../types";
 import CurrencySelect from "./CurrencySelect";
+import DonutChart, { type Slice } from "./DonutChart";
 import { fmtMoney } from "../currencies";
 
 const CATS = ["flights", "food", "transport", "lodging", "activities", "shopping", "other"] as const;
@@ -23,6 +24,32 @@ const BOOKING_KIND_CAT: Record<string, string> = {
   flight: "flights", stay: "lodging", train: "transport", bus: "transport",
   ferry: "transport", car: "transport", activity: "activities", other: "other",
 };
+
+/** Cities are whatever the trip has, so they're coloured by position from a fixed ramp. */
+const CITY_COLORS = [
+  "#e88005", "#e86431", "#c93b6e", "#8aa016", "#b4652e",
+  "#f0a41c", "#6b5b95", "#e8412f", "#5f7a0e", "#a5917c",
+];
+
+/**
+ * A dozen one-percent slivers are unreadable and make the ring look like static, so
+ * anything below `minPct` — and anything past `max` slices — is rolled into one "Other".
+ */
+function toSlices(
+  totals: Record<string, number>,
+  colorFor: (label: string, i: number) => string,
+  { max = 8, minPct = 2 } = {}
+): Slice[] {
+  const sorted = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((s, [, v]) => s + v, 0);
+  if (total <= 0) return [];
+
+  const kept = sorted.filter(([, v], i) => i < max && (v / total) * 100 >= minPct);
+  const rest = total - kept.reduce((s, [, v]) => s + v, 0);
+  const slices = kept.map(([label, value], i) => ({ label, value, color: colorFor(label, i) }));
+  if (rest > 0.005) slices.push({ label: "other", value: rest, color: "#a5917c" });
+  return slices;
+}
 
 export default function ExpensesTab({ detail, refresh, homeCurrency }: {
   detail: TripDetail;
@@ -104,7 +131,10 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
   }
 
   const budgetHome = trip.budget ? toHome(trip.budget, trip.currency || home).value : 0;
-  const maxCat = Math.max(1, ...Object.values(byCategory));
+  // Categories keep their fixed colours so a category is the same hue wherever it appears;
+  // cities have no fixed identity, so they take the ramp in descending-spend order.
+  const catSlices = toSlices(byCategory, (label) => CAT_COLORS[label] || CAT_COLORS.other);
+  const citySlices = toSlices(byCity, (_label, i) => CITY_COLORS[i % CITY_COLORS.length]);
 
   return (
     <div className="pad">
@@ -132,31 +162,19 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
       </div>
 
       <div className="exp-breakdowns">
-        <div>
+        <div className="exp-breakdown">
           <h3>By category</h3>
-          {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
-            <div className="exp-row" key={cat}>
-              <span className="exp-label">{cat}</span>
-              <div className="exp-bar-track">
-                <div className="exp-bar" style={{ width: `${(amt / maxCat) * 100}%`, background: CAT_COLORS[cat] }} />
-              </div>
-              <span className="exp-amt">{fmtMoney(amt, home)}</span>
-            </div>
-          ))}
-          {Object.keys(byCategory).length === 0 && <p className="hint">Nothing yet.</p>}
+          <DonutChart
+            slices={catSlices} centerValue={fmtMoney(grandTotal, home)} centerLabel="total"
+            format={(v) => fmtMoney(v, home)}
+          />
         </div>
-        <div>
+        <div className="exp-breakdown">
           <h3>By city</h3>
-          {Object.entries(byCity).sort((a, b) => b[1] - a[1]).map(([city, amt]) => (
-            <div className="exp-row" key={city}>
-              <span className="exp-label" dir="auto">{city}</span>
-              <div className="exp-bar-track">
-                <div className="exp-bar" style={{ width: `${(amt / Math.max(1, ...Object.values(byCity))) * 100}%` }} />
-              </div>
-              <span className="exp-amt">{fmtMoney(amt, home)}</span>
-            </div>
-          ))}
-          {Object.keys(byCity).length === 0 && <p className="hint">Nothing yet.</p>}
+          <DonutChart
+            slices={citySlices} centerValue={String(citySlices.length)} centerLabel="places"
+            format={(v) => fmtMoney(v, home)}
+          />
         </div>
       </div>
 
@@ -172,6 +190,11 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
             <CurrencySelect value={form.currency} legs={legs} onChange={(c) => setForm({ ...form, currency: c })} />
           </div>
         </label>
+        {/* Date sits before category/city so the wide-screen grid pairs it with Amount
+            rather than stranding it under the full-width pair below. */}
+        <label className="block">Date
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        </label>
         <div className="two-col">
           <label className="block">Category
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
@@ -185,9 +208,6 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
             </select>
           </label>
         </div>
-        <label className="block">Date
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        </label>
         <button className="primary" onClick={add}>+ Add expense</button>
       </div>
 
