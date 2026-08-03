@@ -13,10 +13,13 @@ function bundleText(b: TripBundle): string {
   // an absent time means unknown, not midnight, so it's left off the line entirely.
   const at = (date: string | null, time: string | null) =>
     `${date || "?"}${date && time ? ` ${time}` : ""}`;
+  // Only stated when the traveller answered the transport survey — an unanswered leg says nothing
+  // rather than implying a mode the plan would then be built around.
   const legLines = b.legs
     .map(
       (l) =>
-        `- leg#${l.id} [${l.seq}] ${l.city}, ${l.country} | ${at(l.arrive_date, l.arrive_time)} -> ${at(l.depart_date, l.depart_time)}`
+        `- leg#${l.id} [${l.seq}] ${l.city}, ${l.country} | ${at(l.arrive_date, l.arrive_time)} -> ${at(l.depart_date, l.depart_time)}` +
+        (l.transport ? ` | getting around: ${l.transport}` : "")
     )
     .join("\n");
   const placeLines = b.places
@@ -52,7 +55,8 @@ export const DEFAULT_PLAN_SYSTEM_PROMPT = `You are a travel scheduling engine. Y
 Rules:
 - Respect leg date ranges: a place belongs to its leg's city and dates.
 - Respect fixed bookings (flights/trains) as immovable.
-- Realistic pacing: account for travel time between places in the same city (assume public transit), typical opening hours, and meal times.
+- Realistic pacing: account for travel time between places in the same city, typical opening hours, and meal times.
+- A leg line may state how the traveller gets around that city ("getting around: transit|car|walk|taxi|mixed"). Size travel times and routing advice around it: with a car, mention parking and prefer clustering by driving distance; on foot, keep consecutive stops genuinely walkable; on transit, name the line. When a leg states nothing, assume public transit and say so rather than inventing a car.
 - 'must' places get scheduled first; 'want' next; 'maybe' only if the day has room — otherwise leave them out and note it.
 - Include a wake_time per day; flag days that require waking before 07:30.
 - Insert explicit rest blocks on dense days and after intercity travel days.
@@ -116,6 +120,38 @@ Review the plan and reply as JSON with this exact shape:
   "day_notes": [ { "date": "YYYY-MM-DD", "note": "short note" } ]
 }
 If the plan is fine, return empty arrays — do not invent problems, and NEVER suggest adding anything new.`,
+  };
+}
+
+/**
+ * Background on ONE place the traveller already picked. This is the one prompt that is allowed to
+ * tell the user something they didn't put in themselves — but only *about their own choice*: what
+ * the place is, why it matters, when to turn up. It still may not point them at anything new, which
+ * is the rule the whole app is built on.
+ */
+export function insightPrompt(place: any, city: string, country: string): { system: string; user: string } {
+  return {
+    system: `You are a travel guide writing about ONE place the traveller has already decided to visit. Your job is to make that visit better — never to redirect it. You must NEVER recommend other attractions, restaurants, cafes, shops, neighbourhoods, day trips or activities, not even nearby ones, and never as a "while you're there". Write only about the place named.
+
+Accuracy matters more than colour: if you are not confident about a specific date, name, figure or opening time, write the general version instead of a specific claim, and lower your confidence. An empty field is better than an invented one.
+
+Reply with ONLY a JSON object, no prose.`,
+    user: `PLACE: "${place.name}"
+City: ${city || "unknown"}${country ? `, ${country}` : ""}
+Category: ${place.category || "unknown"}
+Time the traveller has set aside: ${place.duration_min || "?"} minutes
+Their own note: ${place.notes || "none"}
+
+Reply as JSON with this exact shape:
+{
+  "headline": "one short line capturing what this place actually is",
+  "history": "2-4 sentences: what it is, when and why it came to be, why it is worth the stop",
+  "fun_fact": "one genuinely surprising, verifiable fact about this place, or an empty string",
+  "best_time": "when in the day/week to go and what the crowds are like, or an empty string",
+  "tips": ["practical tips for visiting THIS place: tickets, entrances, queues, dress code, cash, accessibility"],
+  "duration_note": "whether the time set aside is about right, too tight, or generous — and why",
+  "confidence": "high|medium|low"
+}`,
   };
 }
 

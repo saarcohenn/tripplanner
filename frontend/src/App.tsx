@@ -428,8 +428,9 @@ export default function App() {
           <PlacesTab detail={detail} refresh={refresh} gmapsKey={appConfig?.google_maps_api_key || null}
             llmReady={llmReady} generatePlan={generatePlan} theme={theme} />
         ) : tab === "Plan" ? (
-          <PlanTab detail={detail} refresh={refresh} llmReady={llmReady} generatePlan={generatePlan}
-            reAdvise={reAdvise} planJob={planJob} busy={!!busy} />
+          <PlanTab key={detail.trip.id} detail={detail} refresh={refresh} llmReady={llmReady}
+            generatePlan={generatePlan} reAdvise={reAdvise} planJob={planJob} busy={!!busy}
+            gmapsKey={appConfig?.google_maps_api_key || null} theme={theme} />
         ) : tab === "Todos" ? (
           <TodosTab detail={detail} refresh={refresh} />
         ) : tab === "Expenses" ? (

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
-import { planPrompt, advisorPrompt, importPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
+import { planPrompt, advisorPrompt, importPrompt, insightPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
 import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
 
@@ -297,7 +297,7 @@ type ChildSpec = { table: string; fields: string[]; affectsPlan: boolean };
 const TIME_FIELDS = new Set(["arrive_time", "depart_time"]);
 const cellValue = (col: string, v: unknown) => (TIME_FIELDS.has(col) ? hhmm(v) : v);
 const children: Record<string, ChildSpec> = {
-  legs: { table: "legs", fields: ["seq", "city", "country", "airport", "arrive_date", "arrive_time", "depart_date", "depart_time", "lat", "lng", "notes"], affectsPlan: true },
+  legs: { table: "legs", fields: ["seq", "city", "country", "airport", "arrive_date", "arrive_time", "depart_date", "depart_time", "transport", "lat", "lng", "notes"], affectsPlan: true },
   places: { table: "places", fields: ["leg_id", "name", "category", "lat", "lng", "duration_min", "priority", "status", "notes", "gmaps_url", "google_place_id", "photo_ref"], affectsPlan: true },
   todos: { table: "todos", fields: ["text", "category", "due_date", "done"], affectsPlan: false },
   expenses: { table: "expenses", fields: ["leg_id", "category", "title", "amount", "currency", "date", "notes"], affectsPlan: false },
@@ -430,6 +430,81 @@ api.post("/trips/:id/advise", wrap(async (req, res) => {
     return { planId: plan.id };
   });
   res.status(202).json(job);
+}));
+
+// ---------- hand-built / hand-edited plans ----------
+// The plan document is written whole rather than patched item by item: it's a few KB, every edit
+// (drag, retime, delete) is one save, and an LLM plan and a hand-built one stay the exact same
+// shape — so the advisor, the day cards and everything downstream work on either without caring.
+api.put("/trips/:id/plan", wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const doc = req.body.plan;
+  if (!doc || !Array.isArray(doc.days)) {
+    throw Object.assign(new Error("plan.days is required"), { status: 400 });
+  }
+  const trip: any = db.prepare("SELECT plan_version FROM trips WHERE id = ?").get(tripId);
+  if (!trip) throw Object.assign(new Error("Trip not found"), { status: 404 });
+  const mode = req.body.mode === "llm" ? "llm" : "manual";
+  const json = JSON.stringify(doc);
+  const existing: any = db.prepare("SELECT id FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
+
+  // Saving by hand re-marks the plan as current: the user just reconciled it with whatever
+  // changed, so the "plan is out of date" banner has nothing left to complain about.
+  if (existing) {
+    db.prepare(
+      `UPDATE plans SET plan_json = ?, mode = ?, plan_version = ?, edited_at = datetime('now') WHERE id = ?`
+    ).run(json, mode, trip.plan_version, existing.id);
+  } else {
+    db.prepare(
+      `INSERT INTO plans (trip_id, plan_version, plan_json, mode, edited_at) VALUES (?,?,?,?,datetime('now'))`
+    ).run(tripId, trip.plan_version, json, mode);
+  }
+  db.prepare("UPDATE trips SET stage = 'planned' WHERE id = ?").run(tripId);
+  res.json(db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId));
+}));
+
+// ---------- per-place insights (one small LLM call, cached forever) ----------
+function insightRow(placeId: number) {
+  return db.prepare("SELECT json, generated_at FROM place_insights WHERE place_id = ?").get(placeId) as
+    | { json: string; generated_at: string }
+    | undefined;
+}
+
+/** The place plus the leg city it belongs to — both routes below need exactly this. */
+function placeWithCity(id: number) {
+  const place: any = db.prepare("SELECT * FROM places WHERE id = ?").get(id);
+  if (!place) throw Object.assign(new Error("Place not found"), { status: 404 });
+  const leg: any = place.leg_id
+    ? db.prepare("SELECT city, country FROM legs WHERE id = ?").get(place.leg_id)
+    : null;
+  return { place, city: leg?.city || "", country: leg?.country || "" };
+}
+
+api.get("/places/:id/insight", wrap((req, res) => {
+  const { place } = placeWithCity(Number(req.params.id));
+  assertTripAccess(req.user.id, place.trip_id);
+  const row = insightRow(place.id);
+  res.json(row ? { insight: JSON.parse(row.json), generated_at: row.generated_at } : { insight: null, generated_at: null });
+}));
+
+// Synchronous, unlike plan generation: one place is a short prompt and a short answer, so the
+// request returns in seconds and doesn't need the whole background-job machinery.
+api.post("/places/:id/insight", wrap(async (req, res) => {
+  const { place, city, country } = placeWithCity(Number(req.params.id));
+  assertTripWrite(req.user.id, place.trip_id);
+  const existing = insightRow(place.id);
+  if (existing && !req.body?.refresh) {
+    return void res.json({ insight: JSON.parse(existing.json), generated_at: existing.generated_at });
+  }
+  const p = insightPrompt(place, city, country);
+  const raw = await complete(p.system, p.user, loadLlmConfig(req.user), "insight", req.user.id);
+  const insight = extractJson(raw);
+  db.prepare(
+    `INSERT INTO place_insights (place_id, json, generated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(place_id) DO UPDATE SET json = excluded.json, generated_at = excluded.generated_at`
+  ).run(place.id, JSON.stringify(insight));
+  res.json({ insight, generated_at: insightRow(place.id)!.generated_at });
 }));
 
 // Current/most recent job for a trip — lets a freshly loaded page recover job state without SSE.

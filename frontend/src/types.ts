@@ -76,10 +76,14 @@ export type Leg = {
   arrive_time: string;
   depart_date: string | null;
   depart_time: string;
+  /** How you get around this city. "" means unanswered — never assumed. */
+  transport: TransportMode;
   lat: number | null;
   lng: number | null;
   notes: string;
 };
+
+export type TransportMode = "" | "transit" | "car" | "walk" | "taxi" | "mixed";
 
 export type Place = {
   id: number;
@@ -146,6 +150,9 @@ export type PlanItem = {
   details?: string;
   tip?: string;
   note?: string;
+  /** Seeded from a booking or a leg's own arrival/departure time — a fixed point the day is built around. */
+  pinned?: boolean;
+  booking_id?: number | null;
 };
 
 export type PlanDay = {
@@ -179,6 +186,20 @@ export type PlanRow = {
   plan_json: string;
   advisor_json: string | null;
   generated_at: string;
+  /** Whether the current document came out of the generator or was built/edited by hand. */
+  mode: "llm" | "manual";
+  edited_at: string | null;
+};
+
+/** Background on a single chosen place. Never points anywhere new — see insightPrompt on the server. */
+export type PlaceInsight = {
+  headline: string;
+  history: string;
+  fun_fact: string;
+  best_time: string;
+  tips: string[];
+  duration_note: string;
+  confidence: "high" | "medium" | "low";
 };
 
 export type TripDetail = {

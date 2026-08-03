@@ -87,6 +87,15 @@ CREATE TABLE IF NOT EXISTS plans (
   generated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Cached per-place background written by the LLM (history, what to expect, visiting tips). Keyed by
+-- place, not by plan, so it survives regeneration — the facts about a place don't change when the
+-- schedule does. Regenerated only when explicitly asked for, since every row costs an LLM call.
+CREATE TABLE IF NOT EXISTS place_insights (
+  place_id INTEGER PRIMARY KEY REFERENCES places(id) ON DELETE CASCADE,
+  json TEXT NOT NULL,
+  generated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -216,6 +225,14 @@ addColumn("trips", "home_airport TEXT DEFAULT ''");
 // behaves exactly as it did before.
 addColumn("legs", "arrive_time TEXT DEFAULT ''");
 addColumn("legs", "depart_time TEXT DEFAULT ''");
+// How the traveller gets around inside this city. Drives the travel-time estimates between two
+// stops in a day and is handed to the planner as a constraint. Blank means "not answered yet" —
+// the app then falls back to a generic mixed-mode speed instead of pretending it knows.
+addColumn("legs", "transport TEXT DEFAULT ''"); // '' | transit | car | walk | taxi | mixed
+// A plan can now be built (and edited) by hand, not only generated. `mode` records which it is so
+// the UI can say "generated" vs "edited", and `edited_at` tracks the last manual save.
+addColumn("plans", "mode TEXT DEFAULT 'llm'"); // llm | manual
+addColumn("plans", "edited_at TEXT");
 
 // Rooms used to have only 'owner'/'member' roles; 'member' is now split into 'editor'/'viewer'.
 // Existing non-owner members keep the edit rights they already had rather than being silently

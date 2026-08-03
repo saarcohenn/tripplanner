@@ -1,16 +1,58 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlarmClock, BedDouble, CircleDot, Flame, Hotel, Luggage, MapPin, Plane, Sparkles,
-  Sunrise, TrainFront, TriangleAlert, UtensilsCrossed, Wallet,
+  AlarmClock, BedDouble, Car, CarTaxiFront, ChevronLeft, ChevronRight, CircleDot, Clock,
+  Flame, Footprints, GripVertical, Hotel, Info, Luggage, Map as MapIcon, MapPin, Pencil,
+  Plane, Plus, Route, Shuffle, Sparkles, Sunrise, TrainFront, Trash2, TriangleAlert,
+  UtensilsCrossed, Wallet, Wand2,
 } from "lucide-react";
 import { api } from "../api";
-import type { AdvisorDoc, PlanDoc, PlanJob, TripDetail } from "../types";
+import {
+  blankDay, fmtDayLabel, fmtDayShort, fromMin, hopBetween, hopShortfall, isoDate, itemForPlace,
+  legForDate, retimeDay, scaffoldPlan, toMin, TRANSPORT_FALLBACK, transportLabel, tripDates,
+  unscheduledPlaceIds, weekday,
+} from "../plan";
+import type {
+  AdvisorDoc, Leg, Place, PlanDay, PlanDoc, PlanItem, PlanJob, PlanRow, TransportMode, TripDetail,
+} from "../types";
+import DayMap, { DayStop } from "./DayMap";
+import PlaceInsightPanel from "./PlaceInsightPanel";
+import TimeField from "./TimeField";
+import TransportSurvey from "./TransportSurvey";
+import { CATEGORY_COLORS } from "./TripMap";
 
 const KIND_ICON: Record<string, typeof MapPin> = {
   visit: MapPin, meal: UtensilsCrossed, transit: TrainFront, rest: BedDouble,
   checkin: Hotel, checkout: Luggage, flight: Plane, other: CircleDot,
 };
+const KINDS = ["visit", "meal", "transit", "rest", "checkin", "checkout", "flight", "other"];
 
-export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdvise, planJob, busy }: {
+const TRANSPORT_ICON: Record<string, typeof Car> = {
+  transit: TrainFront, car: Car, walk: Footprints, taxi: CarTaxiFront, mixed: Shuffle,
+};
+
+/** Drag sources and drop targets, resolved through data attributes so touch works the same as mouse. */
+type DragPayload = { kind: "place"; placeId: number } | { kind: "item"; index: number };
+type DropTarget =
+  | { kind: "index"; index: number }
+  | { kind: "end" }
+  | { kind: "tray" }
+  | { kind: "day"; date: string };
+
+/** Matches the breakpoint where the advisor rail stops sitting beside the days (see styles.css). */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 1110px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1110px)");
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
+}
+
+export default function PlanTab({
+  detail, refresh, llmReady, generatePlan, reAdvise, planJob, busy, gmapsKey, theme,
+}: {
   detail: TripDetail;
   refresh: () => Promise<void>;
   llmReady: boolean;
@@ -18,13 +60,159 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
   reAdvise: () => Promise<void>;
   planJob: PlanJob | null;
   busy: boolean;
+  gmapsKey: string | null;
+  theme: "light" | "dark";
 }) {
-  const { plan, places } = detail;
+  const { trip, plan, legs, places, bookings } = detail;
   const advising = busy && planJob?.kind === "advisor";
-  const placeById = new Map(places.map((p) => [p.id, p]));
+  const narrow = useNarrow();
 
-  const planDoc: PlanDoc | null = plan ? safeParse(plan.plan_json) : null;
-  const advisor: AdvisorDoc | null = plan?.advisor_json ? safeParse(plan.advisor_json) : null;
+  const placeById = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
+  const advisor: AdvisorDoc | null = plan?.advisor_json ? safeParse<AdvisorDoc>(plan.advisor_json) : null;
+
+  // ---------- the editable document ----------
+  // The server's copy is the source of truth; this adopts it whenever the string actually changes,
+  // which after our own save is the string we just sent — so local edits are never stomped.
+  const [doc, setDoc] = useState<PlanDoc | null>(null);
+  const serverJsonRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const json = plan?.plan_json ?? null;
+    if (json === serverJsonRef.current) return;
+    serverJsonRef.current = json;
+    setDoc(json ? safeParse<PlanDoc>(json) : null);
+  }, [plan?.plan_json]);
+
+  const docRef = useRef<PlanDoc | null>(null);
+  useEffect(() => { docRef.current = doc; }, [doc]);
+
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveTimer = useRef<number | null>(null);
+
+  const flush = useCallback(async (next: PlanDoc) => {
+    setSaveState("saving");
+    setSaveError(null);
+    try {
+      const row = await api.put<PlanRow>(`/trips/${trip.id}/plan`, { plan: next, mode: "manual" });
+      serverJsonRef.current = row.plan_json;
+      setSaveState("saved");
+      await refresh();
+    } catch (e: any) {
+      setSaveState("error");
+      setSaveError(e.message);
+    }
+  }, [trip.id, refresh]);
+
+  /** Every edit goes through here: optimistic locally, written back after a short quiet period. */
+  const commit = useCallback((next: PlanDoc) => {
+    setDoc(next);
+    docRef.current = next;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => { void flush(next); }, 500);
+  }, [flush]);
+
+  useEffect(() => () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); }, []);
+
+  // ---------- which day is on screen ----------
+  const dates = useMemo(() => (doc?.days || []).map((d) => d.date), [doc]);
+  const [activeDate, setActiveDate] = useState<string | null>(null);
+  useEffect(() => {
+    if (dates.length === 0) return void setActiveDate(null);
+    setActiveDate((cur) => {
+      if (cur && dates.includes(cur)) return cur;
+      const today = isoDate(new Date());
+      return dates.find((d) => d >= today) ?? dates[0];
+    });
+  }, [dates]);
+  const activeDateRef = useRef<string | null>(null);
+  useEffect(() => { activeDateRef.current = activeDate; }, [activeDate]);
+
+  const dayIndex = doc?.days.findIndex((d) => d.date === activeDate) ?? -1;
+  const day: PlanDay | null = dayIndex >= 0 ? doc!.days[dayIndex] : null;
+  const activeLeg: Leg | null = activeDate ? legForDate(activeDate, legs) : null;
+  const mode: TransportMode = activeLeg?.transport || "";
+
+  const [editing, setEditing] = useState(false);
+  const [showMap, setShowMap] = useState(true);
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [rail, setRail] = useState<"advisor" | "place">("advisor");
+  const [selected, setSelected] = useState<number | null>(null); // index into the active day's items
+
+  // A day switch invalidates an index into the old day's list.
+  useEffect(() => { setSelected(null); }, [activeDate]);
+
+  const selectedPlace: Place | null = (() => {
+    if (selected == null || !day) return null;
+    const id = day.items?.[selected]?.place_id;
+    return id != null ? placeById.get(id) || null : null;
+  })();
+
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    stripRef.current?.querySelector<HTMLElement>(".day-chip.active")
+      ?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [activeDate]);
+
+  // ---------- mutations ----------
+  function patchDay(patch: Partial<PlanDay>, at = dayIndex) {
+    const cur = docRef.current;
+    if (!cur || at < 0) return;
+    const days = cur.days.slice();
+    days[at] = { ...days[at], ...patch };
+    commit({ ...cur, days });
+  }
+
+  function patchItem(index: number, patch: Partial<PlanItem>) {
+    if (!day) return;
+    const items = (day.items || []).slice();
+    items[index] = { ...items[index], ...patch };
+    patchDay({ items });
+  }
+
+  function removeItem(index: number) {
+    if (!day) return;
+    const items = (day.items || []).slice();
+    items.splice(index, 1);
+    patchDay({ items });
+    setSelected(null);
+  }
+
+  function appendItem(item: PlanItem) {
+    if (!day) return;
+    patchDay({ items: [...(day.items || []), item] });
+  }
+
+  /** Order on screen is the truth; a new item just gets a sensible clock label to start from. */
+  function timeAt(items: PlanItem[], idx: number, wake: string): string {
+    if (idx <= 0) return fromMin(Math.max((toMin(wake) ?? 8 * 60) + 60, 9 * 60));
+    const prev = items[idx - 1];
+    const m = toMin(prev.time);
+    return m == null ? "09:00" : fromMin(m + (prev.duration_min || 0) + 15);
+  }
+
+  function retime() {
+    if (!day) return;
+    patchDay(retimeDay(day, mode, placeById));
+  }
+
+  function buildScaffold() {
+    commit(scaffoldPlan(trip, legs, bookings, docRef.current));
+    setEditing(true);
+  }
+
+  function addMissingDays() {
+    const cur = docRef.current;
+    if (!cur) return;
+    const have = new Set(cur.days.map((d) => d.date));
+    const extra = tripDates(trip, legs).filter((d) => !have.has(d)).map((d) => blankDay(d, legs, bookings));
+    if (extra.length === 0) return;
+    commit({ ...cur, days: [...cur.days, ...extra].sort((a, b) => a.date.localeCompare(b.date)) });
+  }
+
+  async function setLegTransport(leg: Leg, value: TransportMode) {
+    await api.put(`/legs/${leg.id}`, { transport: value });
+    await refresh();
+  }
 
   async function dropPlace(placeId: number | null) {
     if (placeId == null) return;
@@ -32,104 +220,493 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
     await refresh();
   }
 
-  if (!planDoc) {
+  // ---------- drag and drop ----------
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+
+  function resolveTarget(x: number, y: number): DropTarget | null {
+    const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-drop]");
+    if (!el) return null;
+    switch (el.dataset.drop) {
+      case "index": return { kind: "index", index: Number(el.dataset.index) };
+      case "end": return { kind: "end" };
+      case "tray": return { kind: "tray" };
+      case "day": return el.dataset.date ? { kind: "day", date: el.dataset.date } : null;
+      default: return null;
+    }
+  }
+
+  // Pointer Events rather than HTML5 drag-and-drop — same choice (and reason) as the leg reorder
+  // on the Overview tab: one code path that actually works on a phone.
+  function startDrag(e: React.PointerEvent, payload: DragPayload) {
+    e.preventDefault();
+    setDragging(payload.kind === "item" ? `item-${payload.index}` : `place-${payload.placeId}`);
+    let target: DropTarget | null = null;
+
+    const onMove = (ev: PointerEvent) => {
+      target = resolveTarget(ev.clientX, ev.clientY);
+      setOver(
+        target == null ? null
+          : target.kind === "index" ? `index-${target.index}`
+          : target.kind === "day" ? `day-${target.date}`
+          : target.kind
+      );
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setDragging(null);
+      setOver(null);
+      if (target) applyDrop(payload, target);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
+  function applyDrop(payload: DragPayload, target: DropTarget) {
+    const cur = docRef.current;
+    const date = activeDateRef.current;
+    if (!cur || !date) return;
+    const days = cur.days.map((d) => ({ ...d, items: [...(d.items || [])] }));
+    const di = days.findIndex((d) => d.date === date);
+    if (di < 0) return;
+    const source = days[di];
+
+    let moving: PlanItem;
+    if (payload.kind === "item") {
+      const found = source.items[payload.index];
+      if (!found) return;
+      moving = found;
+      source.items.splice(payload.index, 1);
+    } else {
+      const place = placeById.get(payload.placeId);
+      if (!place) return;
+      moving = itemForPlace(place, "09:00");
+    }
+
+    if (target.kind === "tray") {
+      // Dragging a scheduled item back to the tray unschedules it; a tray place dropped on the
+      // tray is a no-op, and the splice above never touched it.
+      commit({ ...cur, days });
+      setSelected(null);
+      return;
+    }
+
+    if (target.kind === "day" && target.date !== date) {
+      const tj = days.findIndex((d) => d.date === target.date);
+      if (tj < 0) return;
+      const dest = days[tj];
+      dest.items.push({ ...moving, time: timeAt(dest.items, dest.items.length, dest.wake_time) });
+      commit({ ...cur, days });
+      setSelected(null);
+      return;
+    }
+
+    let idx = target.kind === "end" || target.kind === "day" ? source.items.length : target.index;
+    // The splice above already shifted everything below the old slot up by one.
+    if (payload.kind === "item" && idx > payload.index) idx -= 1;
+    idx = Math.max(0, Math.min(source.items.length, idx));
+    const time = payload.kind === "item" ? moving.time : timeAt(source.items, idx, source.wake_time);
+    source.items.splice(idx, 0, { ...moving, time });
+    commit({ ...cur, days });
+    setSelected(null);
+  }
+
+  // ---------- derived views ----------
+  const unscheduled = useMemo(() => unscheduledPlaceIds(doc, places), [doc, places]);
+  const trayPlaces = useMemo(() => {
+    const ids = new Set(unscheduled);
+    return places.filter(
+      (p) => ids.has(p.id) && (activeLeg == null || p.leg_id === activeLeg.id || p.leg_id == null)
+    );
+  }, [unscheduled, places, activeLeg]);
+
+  const stops: DayStop[] = useMemo(() => {
+    const out: DayStop[] = [];
+    (day?.items || []).forEach((it, i) => {
+      const p = it.place_id != null ? placeById.get(it.place_id) : undefined;
+      if (!p || p.lat == null || p.lng == null) return;
+      out.push({
+        key: String(i),
+        lat: p.lat, lng: p.lng,
+        label: String(out.length + 1),
+        title: `${it.time} · ${p.name}`,
+        color: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other,
+      });
+    });
+    return out;
+  }, [day, placeById]);
+
+  // ---------- empty state ----------
+  // A hand-built plan needs dates to hang days off; without them there is nothing to scaffold.
+  const plannable = tripDates(trip, legs).length > 0;
+
+  if (!doc || doc.days.length === 0) {
     return (
       <div className="pad narrow">
         <h2>Daily plan</h2>
         <p className="hint">
-          No plan generated yet. The generator arranges <em>only the places you chose</em> into a daily
-          schedule — it never adds new attractions.
+          Two ways in. Either lay the days out yourself from the places and bookings you've already
+          entered, or let the generator arrange them — it schedules <em>only the places you chose</em>,
+          it never adds new attractions.
         </p>
-        <button className="primary" onClick={generatePlan} disabled={!llmReady || busy}>
-          {llmReady ? "Generate plan" : "Add an LLM key in Profile first"}
-        </button>
+        <div className="plan-start">
+          <button className="primary btn-icon" onClick={buildScaffold} disabled={!plannable}
+            title={plannable ? "" : "Set the trip dates (or a leg's dates) on the Overview tab first"}>
+            <Pencil size={15} /> Build it myself
+          </button>
+          <button className="btn-icon" onClick={generatePlan} disabled={!llmReady || busy}>
+            <Sparkles size={15} className="ai-mark" /> {llmReady ? "Generate with AI" : "Add an LLM key in Profile first"}
+          </button>
+        </div>
+        <p className="hint">
+          {plannable
+            ? "Building it yourself creates one card per day, already in the right city, with your bookings and stated arrival times dropped in. You then drag your places onto them."
+            : "This trip has no dates yet. Set the trip's start and end (or a city's arrive/depart dates) on the Overview tab, and the days will appear here."}
+        </p>
       </div>
     );
   }
 
+  const missingDays = tripDates(trip, legs).filter((d) => !dates.includes(d)).length;
+  const stamp = plan?.mode === "manual" && plan?.edited_at ? `edited ${plan.edited_at} UTC` : `generated ${plan?.generated_at} UTC`;
+
   return (
     <div className="plan-layout">
-      <div className="plan-days">
-        <div className="row spread">
-          <h2>Daily plan <span className="hint">generated {plan!.generated_at} UTC</span></h2>
-          <button className="primary" onClick={generatePlan} disabled={!llmReady || busy}>Regenerate</button>
-        </div>
-        {planDoc.notes && <p className="hint" dir="auto">{planDoc.notes}</p>}
-        {planDoc.days?.map((d) => (
-          <div className="day-card" key={d.date}>
-            <div className="day-head">
-              <strong>{d.date}</strong> · <span dir="auto">{d.city}</span>
-              {d.alarm_time && <span className={`alarm ${d.alarm_time < "07:30" ? "early" : ""}`} title={d.alarm_reason || ""}><AlarmClock size={12} /> alarm {d.alarm_time}</span>}
-              <span className={`wake ${d.wake_time < "07:30" ? "early" : ""}`}><AlarmClock size={12} /> wake {d.wake_time}</span>
-            </div>
-            {d.alarm_reason && <div className="alarm-reason icon-line" dir="auto"><AlarmClock size={12} /> {d.alarm_reason}</div>}
-            <div className="hint" dir="auto">{d.summary}</div>
-            <ul className="items">
-              {d.items?.map((it, i) => (
-                <li key={i} className={`item kind-${it.kind}`}>
-                  <span className="time">{it.time}</span>
-                  {(() => { const KindIcon = KIND_ICON[it.kind] || CircleDot; return <span className="icon"><KindIcon size={13} /></span>; })()}
-                  <span dir="auto" className="grow">
-                    {it.title}
-                    {it.place_id != null && placeById.get(it.place_id)?.status === "dropped" && (
-                      <em className="hint"> (dropped — regenerate)</em>
-                    )}
-                    {it.details && <div className="item-details" dir="auto">{it.details}</div>}
-                    {it.tip && <div className="item-tip icon-line" dir="auto"><Sparkles size={11} className="ai-mark" /> {it.tip}</div>}
-                  </span>
-                  <span className="hint">{it.duration_min ? `${it.duration_min}m` : ""}</span>
-                </li>
-              ))}
-            </ul>
-            {d.warnings?.map((w, i) => <div className="alert small icon-line" key={i}><TriangleAlert size={12} /> {w}</div>)}
+      {surveyOpen && (
+        <TransportSurvey legs={legs} bookings={bookings} onSet={setLegTransport} onClose={() => setSurveyOpen(false)} />
+      )}
+      {narrow && selectedPlace && (
+        <div className="modal-overlay" onClick={() => setSelected(null)}>
+          <div className="modal insight-sheet" onClick={(e) => e.stopPropagation()}>
+            <PlaceInsightPanel
+              place={selectedPlace} city={activeLeg?.city || ""} llmReady={llmReady}
+              onClose={() => setSelected(null)}
+            />
           </div>
-        ))}
-        {planDoc.unscheduled_place_ids && planDoc.unscheduled_place_ids.length > 0 && (
+        </div>
+      )}
+
+      <div className="plan-days">
+        <div className="row spread plan-head">
+          <h2>
+            Daily plan <span className="hint">{stamp}</span>
+            {saveState === "saving" && <span className="hint"> · saving…</span>}
+            {saveState === "saved" && <span className="hint"> · saved</span>}
+          </h2>
+          <div className="plan-head-actions">
+            <button
+              className={`chip-toggle${editing ? " active" : ""}`} aria-pressed={editing}
+              onClick={() => setEditing((v) => !v)}
+            ><Pencil size={13} /> {editing ? "Done editing" : "Edit"}</button>
+            <button className={`chip-toggle${showMap ? " active" : ""}`} aria-pressed={showMap}
+              onClick={() => setShowMap((v) => !v)}><MapIcon size={13} /> Map</button>
+            <button className="chip-toggle" onClick={() => setSurveyOpen(true)}><Route size={13} /> Transport</button>
+            <button className="chip-toggle" onClick={generatePlan} disabled={!llmReady || busy}
+              title={llmReady ? "Replace this plan with a generated one" : "Add an LLM key in Profile first"}>
+              <Sparkles size={13} className="ai-mark" /> Regenerate
+            </button>
+          </div>
+        </div>
+
+        {saveState === "error" && (
+          <div className="alert icon-line"><TriangleAlert size={13} /> Couldn't save: {saveError}</div>
+        )}
+        {doc.notes && <p className="hint" dir="auto">{doc.notes}</p>}
+
+        {/* Day navigation. In edit mode each chip is also a drop target, which is how an item
+            moves to another day while only one day is on screen. */}
+        <div className="day-nav">
+          <button className="icon-btn" aria-label="Previous day" disabled={dayIndex <= 0}
+            onClick={() => setActiveDate(dates[dayIndex - 1])}><ChevronLeft size={16} /></button>
+          <div className="day-strip" ref={stripRef}>
+            {doc.days.map((d) => (
+              <button
+                key={d.date}
+                data-drop={editing ? "day" : undefined}
+                data-date={d.date}
+                className={`day-chip${d.date === activeDate ? " active" : ""}${over === `day-${d.date}` ? " drag-over" : ""}`}
+                onClick={() => setActiveDate(d.date)}
+              >
+                <span className="day-chip-dow">{weekday(d.date)}</span>
+                <span className="day-chip-date">{fmtDayShort(d.date)}</span>
+                <span className="day-chip-city" dir="auto">{d.city || "—"}</span>
+                <span className="day-chip-count">{d.items?.length || 0}</span>
+              </button>
+            ))}
+          </div>
+          <button className="icon-btn" aria-label="Next day" disabled={dayIndex < 0 || dayIndex >= dates.length - 1}
+            onClick={() => setActiveDate(dates[dayIndex + 1])}><ChevronRight size={16} /></button>
+        </div>
+
+        {missingDays > 0 && (
+          <div className="alert small">
+            {missingDays} {missingDays === 1 ? "day of this trip isn't" : "days of this trip aren't"} in the plan.
+            <button className="inline" onClick={addMissingDays}>Add them</button>
+          </div>
+        )}
+
+        {day && (
+          <div className="day-card day-card-full">
+            <div className="day-head">
+              <strong>{fmtDayLabel(day.date)}</strong> · <span dir="auto">{day.city}</span>
+              <span className="grow" />
+              <span className={`wake ${day.wake_time < "07:30" ? "early" : ""}`}>
+                <AlarmClock size={12} /> wake {day.wake_time}
+              </span>
+            </div>
+
+            {/* How this city gets crossed — the number every travel estimate below comes from. */}
+            <button className={`transport-chip${mode ? "" : " unset"}`} onClick={() => setSurveyOpen(true)}>
+              {(() => { const Icon = TRANSPORT_ICON[mode] || Route; return <Icon size={13} />; })()}
+              {mode
+                ? <>Getting around {day.city || "here"}: <strong>{transportLabel(mode)}</strong></>
+                : <>Getting around {day.city || "here"} isn't set — estimating as {TRANSPORT_FALLBACK.label.toLowerCase()}</>}
+            </button>
+
+            {day.alarm_reason && (
+              <div className="alarm-reason icon-line" dir="auto"><AlarmClock size={12} /> {day.alarm_reason}</div>
+            )}
+
+            {editing ? (
+              <div className="day-edit-row">
+                <label className="block">Summary
+                  <input dir="auto" value={day.summary || ""} placeholder="What today is about"
+                    onChange={(e) => patchDay({ summary: e.target.value })} />
+                </label>
+                <button className="small btn-icon" onClick={retime} title="Recalculate every time from the order, holding fixed items in place">
+                  <Wand2 size={13} /> Re-time day
+                </button>
+              </div>
+            ) : (
+              day.summary && <div className="hint" dir="auto">{day.summary}</div>
+            )}
+
+            {showMap && (
+              <DayMap
+                stops={stops} gmapsKey={gmapsKey} theme={theme} fitKey={day.date}
+                selectedKey={selected == null ? null : String(selected)}
+                onSelect={(k) => { setSelected(Number(k)); setRail("place"); }}
+              />
+            )}
+
+            <ul className="items plan-items">
+              {(day.items || []).map((it, i) => {
+                const place = it.place_id != null ? placeById.get(it.place_id) : undefined;
+                const prev = i > 0 ? day.items[i - 1] : null;
+                const hop = prev ? hopBetween(prev, it, placeById, mode) : null;
+                const short = prev && hop ? hopShortfall(prev, it, hop) : 0;
+                const KindIcon = KIND_ICON[it.kind] || CircleDot;
+                return (
+                  <li key={i} className="plan-row">
+                    {hop && (
+                      <div className={`hop${short > 0 ? " tight" : ""}`}>
+                        {(() => { const Icon = TRANSPORT_ICON[mode] || Route; return <Icon size={11} />; })()}
+                        ~{hop.minutes} min · {hop.km.toFixed(1)} km
+                        {short > 0 && <span className="hop-short"> · {short} min short</span>}
+                      </div>
+                    )}
+                    <div
+                      data-drop={editing ? "index" : undefined}
+                      data-index={i}
+                      className={
+                        `item kind-${it.kind}` +
+                        (selected === i ? " selected" : "") +
+                        (dragging === `item-${i}` ? " dragging" : "") +
+                        (over === `index-${i}` ? " drag-over" : "")
+                      }
+                    >
+                      {editing && (
+                        <button
+                          type="button" className="item-drag" aria-label="Drag to reorder"
+                          onPointerDown={(e) => startDrag(e, { kind: "item", index: i })}
+                        ><GripVertical size={14} /></button>
+                      )}
+
+                      {editing ? (
+                        <div className="item-edit">
+                          <div className="item-edit-top">
+                            <TimeField value={it.time || ""} label={`Start time for ${it.title}`}
+                              onSave={(v) => patchItem(i, { time: v })} />
+                            <select value={it.kind} onChange={(e) => patchItem(i, { kind: e.target.value })} aria-label="Kind">
+                              {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                            <label className="item-dur">
+                              <input type="number" min={0} step={15} value={it.duration_min ?? 0}
+                                onChange={(e) => patchItem(i, { duration_min: Number(e.target.value) })} aria-label="Minutes" />
+                              <span className="hint">min</span>
+                            </label>
+                            {it.pinned && <span className="pin-badge" title="Comes from a booking or a stated arrival time"><Clock size={11} /> fixed</span>}
+                            <button className="icon-btn danger-ghost" aria-label="Remove from the day"
+                              onClick={() => removeItem(i)}><Trash2 size={14} /></button>
+                          </div>
+                          <input dir="auto" className="item-title-input" value={it.title}
+                            onChange={(e) => patchItem(i, { title: e.target.value })} aria-label="Title" />
+                        </div>
+                      ) : (
+                        <>
+                          <span className="time">{it.time}</span>
+                          <span className="icon"><KindIcon size={13} /></span>
+                          <span dir="auto" className="grow">
+                            {it.title}
+                            {place?.status === "dropped" && <em className="hint"> (dropped from the trip)</em>}
+                            {it.details && <div className="item-details" dir="auto">{it.details}</div>}
+                            {it.tip && <div className="item-tip icon-line" dir="auto"><Sparkles size={11} className="ai-mark" /> {it.tip}</div>}
+                          </span>
+                          <span className="hint nowrap">{it.duration_min ? `${it.duration_min}m` : ""}</span>
+                        </>
+                      )}
+
+                      {place && (
+                        <button
+                          className="icon-btn item-info" title={`About ${place.name}`} aria-label={`About ${place.name}`}
+                          onClick={() => { setSelected(i); setRail("place"); }}
+                        ><Info size={14} /></button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+
+              {editing && (
+                <li
+                  data-drop="end"
+                  className={`drop-end${over === "end" ? " drag-over" : ""}`}
+                >Drop a place here to add it at the end of the day</li>
+              )}
+              {(day.items || []).length === 0 && !editing && (
+                <li className="hint">Nothing scheduled for this day yet — hit Edit and drag places in.</li>
+              )}
+            </ul>
+
+            {editing && (
+              <div className="day-add-row">
+                <button className="small btn-icon" onClick={() => appendItem({
+                  time: timeAt(day.items || [], (day.items || []).length, day.wake_time),
+                  kind: "meal", title: "Meal", place_id: null, duration_min: 60,
+                })}><Plus size={13} /> Meal</button>
+                <button className="small btn-icon" onClick={() => appendItem({
+                  time: timeAt(day.items || [], (day.items || []).length, day.wake_time),
+                  kind: "rest", title: "Rest", place_id: null, duration_min: 60,
+                })}><Plus size={13} /> Rest</button>
+                <button className="small btn-icon" onClick={() => appendItem({
+                  time: timeAt(day.items || [], (day.items || []).length, day.wake_time),
+                  kind: "other", title: "New item", place_id: null, duration_min: 30,
+                })}><Plus size={13} /> Something else</button>
+              </div>
+            )}
+
+            {day.warnings?.map((w, i) => (
+              <div className="alert small icon-line" key={i}><TriangleAlert size={12} /> {w}</div>
+            ))}
+          </div>
+        )}
+
+        {/* The pool of chosen-but-unscheduled places. Only what belongs to this city (plus the
+            ones with no city yet) — offering Tokyo's list on a Kyoto day is just noise. */}
+        {editing && (
+          <div
+            data-drop="tray"
+            className={`plan-tray${over === "tray" ? " drag-over" : ""}`}
+          >
+            <div className="row spread">
+              <h3>Your places{activeLeg ? ` in ${activeLeg.city}` : ""} <span className="hint">{trayPlaces.length}</span></h3>
+              <span className="hint">Drag onto the day — or drag a scheduled item back here to unschedule it.</span>
+            </div>
+            <div className="tray-list">
+              {trayPlaces.map((p) => (
+                <div
+                  key={p.id}
+                  className={`tray-card${dragging === `place-${p.id}` ? " dragging" : ""}`}
+                  onPointerDown={(e) => startDrag(e, { kind: "place", placeId: p.id })}
+                >
+                  <span className="tray-dot" style={{ background: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other }} />
+                  <span className="grow" dir="auto">{p.name}</span>
+                  <span className="hint nowrap">{p.duration_min}m · {p.priority}</span>
+                  <GripVertical size={13} className="tray-grip" />
+                </div>
+              ))}
+              {trayPlaces.length === 0 && (
+                <p className="hint">Everything you picked for this city is on a day already.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {unscheduled.length > 0 && !editing && (
           <div className="alert">
-            Didn't fit: {planDoc.unscheduled_place_ids.map((id) => placeById.get(id)?.name || `#${id}`).join(", ")}
+            Not on any day yet: {unscheduled.map((id) => placeById.get(id)?.name || `#${id}`).join(", ")}
           </div>
         )}
       </div>
 
       <aside className="advisor">
-        <div className="row spread">
-          <h2 className="icon-line"><Sparkles size={15} className="ai-mark" /> Advisor</h2>
-          <button className="small" onClick={reAdvise} disabled={!llmReady || advising}>{advising ? "…" : "Re-analyze"}</button>
+        <div className="rail-tabs">
+          <button className={rail === "advisor" ? "active" : ""} onClick={() => setRail("advisor")}>
+            <Sparkles size={13} className="ai-mark" /> Advisor
+          </button>
+          <button className={rail === "place" ? "active" : ""} onClick={() => setRail("place")} disabled={!selectedPlace}>
+            <Info size={13} /> Place
+          </button>
         </div>
-        <p className="hint">The advisor never suggests new places — it only tells you what to drop, when to rest, and when you'll have to get up early.</p>
-        {!advisor && <p className="hint">No analysis yet.</p>}
-        {advisor && (
+
+        {rail === "place" ? (
+          selectedPlace ? (
+            <PlaceInsightPanel place={selectedPlace} city={activeLeg?.city || ""} llmReady={llmReady} />
+          ) : (
+            <p className="hint">Tap a stop on the day (or a pin on the map) to read about it.</p>
+          )
+        ) : (
           <>
-            <p dir="auto">{advisor.overall}</p>
-            {advisor.pacing_alerts?.length > 0 && (
+            <div className="row spread">
+              <h2 className="icon-line"><Sparkles size={15} className="ai-mark" /> Advisor</h2>
+              <button className="small" onClick={reAdvise} disabled={!llmReady || advising}>{advising ? "…" : "Re-analyze"}</button>
+            </div>
+            <p className="hint">
+              The advisor never suggests new places — it only tells you what to drop, when to rest, and
+              when you'll have to get up early. It reads whatever is saved, hand-built plans included.
+            </p>
+            {!advisor && <p className="hint">No analysis yet.</p>}
+            {advisor && (
               <>
-                <h3>Pacing</h3>
-                {advisor.pacing_alerts.map((a, i) => (
-                  <div key={i} className={`alert type-${a.type}`}>
-                    <strong>{a.date}</strong> <AdvisorIcon type={a.type} /> <span dir="auto">{a.message}</span>
-                  </div>
-                ))}
-              </>
-            )}
-            {advisor.drop_suggestions?.length > 0 && (
-              <>
-                <h3>Consider dropping</h3>
-                {advisor.drop_suggestions.map((s, i) => (
-                  <div key={i} className="alert">
-                    <strong dir="auto">{s.place_name}</strong> — <span dir="auto">{s.reason}</span>
-                    {s.place_id != null && placeById.get(s.place_id)?.status === "active" && (
-                      <button className="small" onClick={() => dropPlace(s.place_id)}>Drop it</button>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
-            {advisor.day_notes?.length > 0 && (
-              <>
-                <h3>Day notes</h3>
-                {advisor.day_notes.map((n, i) => (
-                  <p key={i} className="hint"><strong>{n.date}</strong> <span dir="auto">{n.note}</span></p>
-                ))}
+                <p dir="auto">{advisor.overall}</p>
+                {advisor.pacing_alerts?.length > 0 && (
+                  <>
+                    <h3>Pacing</h3>
+                    {advisor.pacing_alerts.map((a, i) => (
+                      <div key={i} className={`alert type-${a.type}`}>
+                        <button className="alert-date" onClick={() => setActiveDate(a.date)}>{a.date}</button>{" "}
+                        <AdvisorIcon type={a.type} /> <span dir="auto">{a.message}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {advisor.drop_suggestions?.length > 0 && (
+                  <>
+                    <h3>Consider dropping</h3>
+                    {advisor.drop_suggestions.map((s, i) => (
+                      <div key={i} className="alert">
+                        <strong dir="auto">{s.place_name}</strong> — <span dir="auto">{s.reason}</span>
+                        {s.place_id != null && placeById.get(s.place_id)?.status === "active" && (
+                          <button className="small" onClick={() => dropPlace(s.place_id)}>Drop it</button>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {advisor.day_notes?.length > 0 && (
+                  <>
+                    <h3>Day notes</h3>
+                    {advisor.day_notes.map((n, i) => (
+                      <p key={i} className="hint">
+                        <button className="alert-date" onClick={() => setActiveDate(n.date)}>{n.date}</button>{" "}
+                        <span dir="auto">{n.note}</span>
+                      </p>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </>
