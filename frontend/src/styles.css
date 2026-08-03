@@ -314,14 +314,23 @@ body {
 /* A tab's content column. Capping each card separately left every block on a page with a
    different width and all of them hard against the left edge; capping the column instead
    means everything inside shares both edges. .narrow is the reading width, .wide the one
-   for tabs whose content is side-by-side panels rather than prose. */
-/* width:100% is load-bearing: .pad is a flex item, and an auto inline margin turns off
-   its stretch, leaving it to size to fit-content — which is its widest content, not the
-   viewport. A definite width keeps the column at the available width and lets max-width
-   and the auto margins do the capping and centring. */
-.narrow, .wide { width: 100%; margin-inline: auto; }
-.narrow { max-width: 760px; }
-.wide { max-width: 940px; }
+   for tabs whose content is side-by-side panels rather than prose.
+
+   The column is *padding*, not width, because .pad is the scroll container: capping its
+   width would drag its scrollbar in from the window edge to wherever the content stopped,
+   leaving a scrollbar stranded mid-page. Padding keeps the container full-width — the bar
+   stays at the right edge — while the content inside is capped and centred. width:100% is
+   load-bearing too: .pad is a flex item, and without a definite width it sizes to
+   fit-content, which is its widest content rather than the viewport. */
+.narrow, .wide {
+  width: 100%;
+  /* Reserve the scrollbar on both sides, so it doesn't take its width out of one side of
+     the content box and leave the column sitting a scrollbar off-centre. */
+  scrollbar-gutter: stable both-edges;
+  padding-inline: max(22px, (100% - var(--col)) / 2);
+}
+.narrow { --col: 760px; }
+.wide { --col: 940px; }
 
 .auth-screen { max-width: 380px; margin: 10vh auto 0; }
 .auth-screen h1 { text-align: center; }
@@ -1569,8 +1578,8 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
 
   /* A textarea spanning 2000px is unreadable regardless of available room. */
   textarea { max-width: 1100px; }
-  .narrow { max-width: 1000px; }
-  .wide { max-width: 1180px; }
+  .narrow { --col: 1000px; }
+  .wide { --col: 1180px; }
 }
 
 @media (min-width: 2000px) {

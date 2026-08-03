@@ -221,7 +221,7 @@ export default function BookingsTab({ detail, refresh, homeCurrency }: {
   const anyUnconverted = bookings.some((b) => b.cost != null && toHome(b.cost, b.currency) == null);
 
   return (
-    <div className="pad">
+    <div className="pad wide">
       <h2 className="icon-line"><Plane size={16} /> Find a flight</h2>
       <FlightFinder trip={trip} legs={legs} />
 
