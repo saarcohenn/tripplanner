@@ -716,12 +716,18 @@ a { color: var(--accent-dark); }
   .booking-add {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px; align-items: center;
+    position: relative; margin-bottom: 34px;
   }
   .booking-add > * { min-width: 0; width: 100%; }
   .booking-add .b-title { grid-column: 1 / -1; }
-  /* Pinned to the last column, so it rides along at the end of the final part-filled row
-     instead of claiming a row of its own. */
-  .booking-add .fab-add { grid-column: -2 / -1; justify-self: end; width: 38px; }
+  /* Straddles the card's bottom edge, centred. Taking it out of flow also fixes the
+     four-column layout, where pinning it to the last column left a hole in the middle of
+     the final row; the card's own padding then closes evenly top and bottom, and the
+     margin below leaves the overhang somewhere to sit. */
+  .booking-add .fab-add {
+    position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%);
+    width: 38px;
+  }
 }
 /* Enough room for four across, but not for all eight on one line. */
 @media (min-width: 701px) and (max-width: 1200px) {
@@ -783,16 +789,22 @@ a { color: var(--accent-dark); }
 @media (max-width: 700px), (min-width: 1400px) {
   .todo {
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: 10px; row-gap: 6px; padding: 10px 12px;
+    column-gap: 10px; row-gap: 10px; padding: 12px;
     align-items: start;
   }
   .todo-lead { grid-area: 1 / 1; padding-top: 3px; }
-  .todo-text, .todo input.todo-text-input { grid-area: 1 / 2; font-size: 14px; }
-  .todo-actions { grid-area: 1 / 3; }
+  /* The task spans to the card's edge: sharing its line with the edit and delete buttons
+     left it ~235px, which wrapped a long one onto three cramped lines. The buttons move
+     down beside the metadata, where there's room going spare. */
+  .todo-text, .todo input.todo-text-input { grid-area: 1 / 2 / 1 / -1; font-size: 14px; }
+  .todo-meta { grid-area: 2 / 2; }
+  .todo-actions { grid-area: 2 / 3; justify-self: end; }
   .todo-actions > * { width: 32px; height: 32px; }
-  .todo-meta { grid-area: 2 / 1 / 2 / -1; }
-  /* Share the second line evenly rather than letting the date input claim it. */
-  .todo-meta > * { flex: 1 1 0; min-width: 0; }
+  /* The category keeps its natural width and the date takes what's left. Splitting the
+     line evenly squeezed the category down to "docu…", since the date field's own
+     content sets a far higher floor. Out-specifies the .todo-meta .drp sizing set later. */
+  .todo .todo-meta > select { flex: 0 0 auto; min-width: 0; }
+  .todo .todo-meta .drp { flex: 1 1 auto; min-width: 0; }
 }
 
 /* Round + button for the todo add-row. Scoped to .todo-add: the other add-rows on the
