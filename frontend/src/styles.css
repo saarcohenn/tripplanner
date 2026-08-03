@@ -722,11 +722,24 @@ a { color: var(--accent-dark); }
   .booking-add .b-title { grid-column: 1 / -1; }
   /* Straddles the card's bottom edge, centred. Taking it out of flow also fixes the
      four-column layout, where pinning it to the last column left a hole in the middle of
-     the final row; the card's own padding then closes evenly top and bottom, and the
-     margin below leaves the overhang somewhere to sit. */
+     the final row; the margin below leaves the overhang somewhere to sit, and the extra
+     bottom padding keeps it clear of the last row of fields. */
+  .booking-add { padding-bottom: 34px; }
   .booking-add .fab-add {
     position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%);
-    width: 38px;
+    width: 38px; z-index: 1;
+  }
+  /* The card's edge bulges around the button instead of running straight through it: a
+     circle in the card's own background and border, clipped to just below its widest
+     point, sitting over the straight border it replaces. */
+  .booking-add::after {
+    content: ""; position: absolute; left: 50%; bottom: 0;
+    transform: translate(-50%, 50%);
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--card); border: 1px solid var(--border);
+    -webkit-clip-path: inset(46% -2px -2px -2px);
+    clip-path: inset(46% -2px -2px -2px);
+    pointer-events: none;
   }
 }
 /* Enough room for four across, but not for all eight on one line. */
