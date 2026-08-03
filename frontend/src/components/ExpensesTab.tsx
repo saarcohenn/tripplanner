@@ -154,7 +154,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
   const citySlices = toSlices(byCity, ["Trip-wide", ...legs.map((l) => l.city)]);
 
   return (
-    <div className="pad">
+    <div className="pad wide">
       <h2>Summary <span className="hint">— everything converted to {home} at today's rate</span></h2>
       <div className="exp-summary">
         <div className="exp-stat">
