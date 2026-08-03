@@ -14,6 +14,8 @@ const SIZE = 168;
 const R = 60;
 const STROKE = 26;
 const CIRC = 2 * Math.PI * R;
+/** Surface gap between arcs, in path units — keeps two neighbours from reading as one. */
+const GAP = 2;
 
 export default function DonutChart({ slices, centerValue, centerLabel, format }: {
   slices: Slice[];
@@ -44,8 +46,13 @@ export default function DonutChart({ slices, centerValue, centerLabel, format }:
               key={a.label}
               className={`donut-arc${active && active !== a.label ? " dim" : ""}`}
               cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none"
-              stroke={a.color} strokeWidth={active === a.label ? STROKE + 6 : STROKE}
-              strokeDasharray={`${a.len} ${CIRC - a.len}`} strokeDashoffset={a.offset}
+              // Via style, not the attribute: the slot colours are CSS variables, which a
+              // presentation attribute wouldn't resolve.
+              style={{ stroke: a.color }}
+              strokeWidth={active === a.label ? STROKE + 6 : STROKE}
+              // A 2px gap of surface between arcs, so neighbours never merge into one shape.
+              strokeDasharray={`${Math.max(0, a.len - GAP)} ${CIRC - a.len + GAP}`}
+              strokeDashoffset={a.offset}
               onMouseEnter={() => setActive(a.label)}
               onMouseLeave={() => setActive(null)}
             >

@@ -11,10 +11,6 @@ import DonutChart, { type Slice } from "./DonutChart";
 import { fmtMoney } from "../currencies";
 
 const CATS = ["flights", "food", "transport", "lodging", "activities", "shopping", "other"] as const;
-const CAT_COLORS: Record<string, string> = {
-  flights: "#e86431", food: "#e8412f", transport: "#e88005", lodging: "#b4652e",
-  activities: "#f0a41c", shopping: "#c93b6e", other: "#a5917c",
-};
 const CAT_ICON: Record<string, typeof Plane> = {
   flights: Plane, food: UtensilsCrossed, transport: TrainFront, lodging: Hotel,
   activities: Ticket, shopping: ShoppingBag, other: CreditCard,
@@ -26,29 +22,48 @@ const BOOKING_KIND_CAT: Record<string, string> = {
   ferry: "transport", car: "transport", activity: "activities", other: "other",
 };
 
-/** Cities are whatever the trip has, so they're coloured by position from a fixed ramp. */
-const CITY_COLORS = [
-  "#e88005", "#e86431", "#c93b6e", "#8aa016", "#b4652e",
-  "#f0a41c", "#6b5b95", "#e8412f", "#5f7a0e", "#a5917c",
-];
+/** The eight chart slots, defined and validated as a set in styles.css. */
+const SERIES = Array.from({ length: 8 }, (_, i) => `var(--series-${i + 1})`);
+const ROLLUP = "other";
 
 /**
- * A dozen one-percent slivers are unreadable and make the ring look like static, so
- * anything below `minPct` — and anything past `max` slices — is rolled into one "Other".
+ * Slices for one ring.
+ *
+ * Two things are load-bearing beyond "turn numbers into arcs":
+ *
+ * - A dozen one-percent slivers read as static rather than data, so anything below
+ *   `minPct`, and anything past the slot count, folds into a single "other".
+ * - Slices come out in `order` — the fixed identity order of the thing being counted,
+ *   not descending value — and take slots in that sequence. The palette's guarantee is
+ *   that *consecutive* slots stay apart under colourblind simulation, so neighbouring
+ *   arcs have to be consecutive slots. Sorting by value would put arbitrary pairs
+ *   against each other, which is a test no eight-colour palette passes.
  */
-function toSlices(
-  totals: Record<string, number>,
-  colorFor: (label: string, i: number) => string,
-  { max = 8, minPct = 2 } = {}
-): Slice[] {
-  const sorted = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  const total = sorted.reduce((s, [, v]) => s + v, 0);
+function toSlices(totals: Record<string, number>, order: string[], minPct = 2): Slice[] {
+  const present = Object.entries(totals).filter(([, v]) => v > 0);
+  const total = present.reduce((s, [, v]) => s + v, 0);
   if (total <= 0) return [];
 
-  const kept = sorted.filter(([, v], i) => i < max && (v / total) * 100 >= minPct);
-  const rest = total - kept.reduce((s, [, v]) => s + v, 0);
-  const slices = kept.map(([label, value], i) => ({ label, value, color: colorFor(label, i) }));
-  if (rest > 0.005) slices.push({ label: "other", value: rest, color: "#a5917c" });
+  // Which entities earn a slice: biggest first, so the rollup drops the smallest.
+  const keep = new Set(
+    present
+      .sort((a, b) => b[1] - a[1])
+      .filter(([, v], i) => i < SERIES.length - 1 && (v / total) * 100 >= minPct)
+      .map(([label]) => label)
+  );
+
+  const rank = new Map(order.map((label, i) => [label, i]));
+  const slices = [...keep]
+    .sort((a, b) => (rank.get(a) ?? 99) - (rank.get(b) ?? 99))
+    .map((label, i) => ({ label, value: totals[label], color: SERIES[i] }));
+
+  const rest = total - slices.reduce((s, x) => s + x.value, 0);
+  if (rest > 0.005) {
+    // Merge rather than push, so a real "other" category and the rollup don't collide.
+    const existing = slices.find((s) => s.label === ROLLUP);
+    if (existing) existing.value += rest;
+    else slices.push({ label: ROLLUP, value: rest, color: SERIES[SERIES.length - 1] });
+  }
   return slices;
 }
 
@@ -132,10 +147,11 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
   }
 
   const budgetHome = trip.budget ? toHome(trip.budget, trip.currency || home).value : 0;
-  // Categories keep their fixed colours so a category is the same hue wherever it appears;
-  // cities have no fixed identity, so they take the ramp in descending-spend order.
-  const catSlices = toSlices(byCategory, (label) => CAT_COLORS[label] || CAT_COLORS.other);
-  const citySlices = toSlices(byCity, (_label, i) => CITY_COLORS[i % CITY_COLORS.length]);
+  // Each ring's identity order: categories have a canonical one, cities have the
+  // itinerary. Both are stable as amounts change, which is what keeps a slice's colour
+  // from jumping around between visits.
+  const catSlices = toSlices(byCategory, [...CATS]);
+  const citySlices = toSlices(byCity, ["Trip-wide", ...legs.map((l) => l.city)]);
 
   return (
     <div className="pad">

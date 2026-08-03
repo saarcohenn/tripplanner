@@ -46,6 +46,14 @@
      rendered result lands a few shades off --bg rather than reading as a picture. */
   --art-far: #d9c7ae; --art-mid: #c9b191; --art-near: #b89a73; --art-leaf: #8aa016;
   --backdrop-opacity: 0.24;
+
+  /* Chart series. Deliberately NOT the brand palette: eight fixed hue families in a
+     fixed order, which is what keeps neighbouring slices apart for colourblind readers.
+     The old set was drawn from the app's warm colours and was five shades of orange —
+     food and flights measured ΔE 6.1 apart to normal vision, against a floor of 15.
+     Validated as a set in both modes; re-run the check before changing any of them. */
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
 }
 
 /* Deep-night theme — cool navy surfaces with a violet cast, brand orange kept as the accent
@@ -92,6 +100,11 @@
   /* Cool blues with a violet cast picked up from the skyline, teal bamboo. */
   --art-far: #1d2f57; --art-mid: #2b4a78; --art-near: #3d3a72; --art-leaf: #2f7a63;
   --backdrop-opacity: 0.5;
+
+  /* The same eight hues, re-stepped for the dark card rather than flipped automatically —
+     validated against #121a2e, where all eight clear 3:1. */
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
 }
 
 /* Native widgets (scrollbars, date pickers, form controls) follow this instead of guessing. */
