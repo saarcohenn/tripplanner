@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ChevronDown, ChevronRight, CreditCard, Globe, Hotel, Plane, ShoppingBag, Ticket,
+  ChevronDown, ChevronRight, CreditCard, Globe, Hotel, Plane, Plus, ShoppingBag, Ticket,
   TrainFront, UtensilsCrossed,
 } from "lucide-react";
 import { api } from "../api";
@@ -225,7 +225,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
             </select>
           </label>
         </div>
-        <button className="primary" onClick={add}>+ Add expense</button>
+        <button className="fab-add" onClick={add} aria-label="Add expense" title="Add expense"><Plus size={18} /></button>
       </div>
 
       <div className="leg-list">

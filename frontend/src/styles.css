@@ -745,31 +745,9 @@ a { color: var(--accent-dark); }
   .booking-add {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px; align-items: center;
-    position: relative; margin-bottom: 34px;
   }
   .booking-add > * { min-width: 0; width: 100%; }
   .booking-add .b-title { grid-column: 1 / -1; }
-  /* Straddles the card's bottom edge, centred. Taking it out of flow also fixes the
-     four-column layout, where pinning it to the last column left a hole in the middle of
-     the final row; the margin below leaves the overhang somewhere to sit, and the extra
-     bottom padding keeps it clear of the last row of fields. */
-  .booking-add { padding-bottom: 34px; }
-  .booking-add .fab-add {
-    position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%);
-    width: 38px; z-index: 1;
-  }
-  /* The card's edge bulges around the button instead of running straight through it: a
-     circle in the card's own background and border, clipped to just below its widest
-     point, sitting over the straight border it replaces. */
-  .booking-add::after {
-    content: ""; position: absolute; left: 50%; bottom: 0;
-    transform: translate(-50%, 50%);
-    width: 54px; height: 54px; border-radius: 50%;
-    background: var(--card); border: 1px solid var(--border);
-    -webkit-clip-path: inset(46% -2px -2px -2px);
-    clip-path: inset(46% -2px -2px -2px);
-    pointer-events: none;
-  }
 }
 /* Enough room for four across, but not for all eight on one line. */
 @media (min-width: 701px) and (max-width: 1200px) {
@@ -849,8 +827,10 @@ a { color: var(--accent-dark); }
   .todo .todo-meta .drp { flex: 1 1 auto; min-width: 0; }
 }
 
-/* Round + button for the todo add-row. Scoped to .todo-add: the other add-rows on the
-   Places/Bookings/Expenses tabs keep their labelled buttons. */
+/* ---------- add-form submit ----------
+   A round + centred on the card's bottom edge, with the card's border bulging around it.
+   One treatment shared by the bookings, expenses and todo forms, so the three read alike
+   whatever each one's fields are doing above it. */
 .fab-add {
   flex: 0 0 auto; width: 38px; height: 38px; padding: 0; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
@@ -859,19 +839,45 @@ a { color: var(--accent-dark); }
 }
 .fab-add:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
 
+.booking-add, .exp-add-row, .todo-add {
+  position: relative;
+  /* Equal to the card's own top padding plus room for the button to clear the last row. */
+  padding-bottom: 34px;
+  /* Somewhere for the half that overhangs to sit. */
+  margin-bottom: 34px;
+}
+.booking-add .fab-add, .exp-add-row .fab-add, .todo-add .fab-add {
+  position: absolute; left: 50%; bottom: 0; z-index: 1;
+  /* Centred with margins rather than a transform. The global button hover sets transform
+     for its 1px lift, which would replace a positioning transform outright — the button
+     jumped diagonally across the card the moment you pointed at it. */
+  margin-left: -19px; margin-bottom: -19px;
+  width: 38px;
+}
+/* The card's edge bulges around the button instead of running straight through it: a
+   circle in the card's own background and border, clipped to just below its widest point,
+   sitting over the straight border it replaces. */
+.booking-add::after, .exp-add-row::after, .todo-add::after {
+  content: ""; position: absolute; left: 50%; bottom: 0;
+  margin-left: -27px; margin-bottom: -27px;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--border);
+  -webkit-clip-path: inset(46% -2px -2px -2px);
+  clip-path: inset(46% -2px -2px -2px);
+  pointer-events: none;
+}
+
 @media (max-width: 700px) {
   /* Flex-wrapping left the four controls landing wherever they fit and never lining up.
      A grid gives the task its own full-width line with the category, date and + button
      sharing the one below, all on a common baseline. */
   .todo-add {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px; align-items: center;
   }
   .todo-add-text { grid-area: 1 / 1 / 1 / -1; min-width: 0; }
   .todo-add-cat { grid-area: 2 / 1; min-width: 0; }
   .todo-add-date { grid-area: 2 / 2; min-width: 0; }
-  /* Scoped: .fab-add is shared with the bookings add-row, whose grid has different rows. */
-  .todo-add .fab-add { grid-area: 2 / 3; }
 }
 
 /* ---------- map (lives at the top of the Places tab) ----------
@@ -1158,9 +1164,7 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
     gap: 0 18px; align-items: start;
   }
   .exp-add-row > label:first-child,
-  .exp-add-row > .two-col,
-  .exp-add-row > button { grid-column: 1 / -1; }
-  .exp-add-row > button { justify-self: start; }
+  .exp-add-row > .two-col { grid-column: 1 / -1; }
 }
 /* A native <select> sizes itself to its widest OPTION text (e.g. "GBP — British Pound"),
    not the row — left unconstrained the currency select dwarfs the amount input. Give both
