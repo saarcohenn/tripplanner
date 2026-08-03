@@ -293,7 +293,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   ].filter((g) => !anyFilterActive || g.items.length > 0);
 
   return (
-    <div className="pad">
+    <div className="pad wide">
       <ConfirmPlanDialog open={gateOpen} llmReady={llmReady} onChoose={onGateChoice} />
 
       <TripMap

@@ -34,7 +34,7 @@ export default function PlanTab({ detail, refresh, llmReady, generatePlan, reAdv
 
   if (!planDoc) {
     return (
-      <div className="pad">
+      <div className="pad narrow">
         <h2>Daily plan</h2>
         <p className="hint">
           No plan generated yet. The generator arranges <em>only the places you chose</em> into a daily

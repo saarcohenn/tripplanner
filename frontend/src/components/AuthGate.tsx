@@ -33,7 +33,7 @@ export default function AuthGate({ onLogin }: { onLogin: (user: User) => void })
   }
 
   return (
-    <div className="pad narrow auth-screen">
+    <div className="pad auth-screen">
       <h1>TripPlanner</h1>
       <h2>{mode === "login" ? "Log in" : "Sign up"}</h2>
       {mode === "signup" && (

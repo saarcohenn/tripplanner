@@ -324,6 +324,11 @@ body {
    fit-content, which is its widest content rather than the viewport. */
 .narrow, .wide {
   width: 100%;
+  /* A query container, so everything inside sizes against the column it actually has
+     rather than the window. With the column capped, the two stopped being the same
+     number — a 2000px window gives a 1150px column, and viewport breakpoints were
+     handing tabs layouts far wider than their content. */
+  container-type: inline-size;
   /* Reserve the scrollbar on both sides, so it doesn't take its width out of one side of
      the content box and leave the column sitting a scrollbar off-centre. */
   scrollbar-gutter: stable both-edges;
@@ -332,7 +337,9 @@ body {
 .narrow { --col: 760px; }
 .wide { --col: 940px; }
 
-.auth-screen { max-width: 380px; margin: 10vh auto 0; }
+/* Its own column, and deliberately not .narrow's: the two set padding and width against
+   different boxes, and together they gave a 380px card several hundred pixels of padding. */
+.auth-screen { width: 100%; max-width: 380px; margin: 10vh auto 0; padding-inline: 22px; }
 .auth-screen h1 { text-align: center; }
 
 /* ---------- motion ----------
@@ -731,40 +738,34 @@ a { color: var(--accent-dark); }
 }
 .finder-fields > * { min-width: 0; }
 .finder .hint { margin-bottom: 0; }
-@media (min-width: 780px) {
+@container (min-width: 700px) {
   .finder-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 /* Two columns still fit a 375px phone at ~155px each; only drop to one when they genuinely
    don't. */
-@media (max-width: 340px) {
+@container (max-width: 320px) {
   .finder-fields { grid-template-columns: minmax(0, 1fr); }
 }
 /* In the stay table the same three providers repeat on every row, so the marks alone carry
    it and the names come off — three labelled links per row wrapped onto two lines. The
    finder appears once, so it keeps its labels and wraps if it must. */
-@media (max-width: 700px) {
+@container (max-width: 640px) {
   .table .pname { display: none; }
   .table .plink { padding: 4px; }
 }
 
-/* The add-row's eight controls wrapped wherever they fit, so nothing lined up until the
-   row was wide enough for one line. Below that it's a tidy grid: title across the top,
-   then the pairs that belong together. */
-@media (max-width: 1200px) {
-  .booking-add {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px; align-items: center;
-  }
-  .booking-add > * { min-width: 0; width: 100%; }
-  .booking-add .b-title { grid-column: 1 / -1; }
+/* The add-row's eight controls wrapped wherever they fit, so nothing lined up. It's a
+   grid at every width now: title across the top, then the pairs that belong together,
+   two columns or four depending on the room the column actually has. (Eight on one line
+   needs ~1200px of content, which the capped column never reaches.) */
+.booking-add {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; align-items: center;
 }
-/* Enough room for four across, but not for all eight on one line. */
-@media (min-width: 701px) and (max-width: 1200px) {
+.booking-add > * { min-width: 0; width: 100%; }
+.booking-add .b-title { grid-column: 1 / -1; }
+@container (min-width: 700px) {
   .booking-add { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (min-width: 1201px) {
-  /* On one line the cost field would otherwise grow to match its neighbours. */
-  .booking-add input[type="number"] { max-width: 110px; }
 }
 
 .alert {
@@ -1008,10 +1009,32 @@ a { color: var(--accent-dark); }
 
 /* ---------- plan ---------- */
 .plan-layout { display: flex; flex: 1; min-height: 0; }
-.plan-days { flex: 1; overflow-y: auto; padding: 14px 22px 28px; }
+/* Same content column as the tabs, expressed as padding so the scrollbar stays on the
+   pane's own edge next to the advisor rather than being pulled in beside the day cards. */
+.plan-days {
+  flex: 1; min-width: 0; overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  /* The percentage resolves against the containing block — the whole layout, advisor
+     included — so the advisor's width comes out of the sum before the column is centred.
+     (cqw doesn't help: an element can't be its own query container, so it would resolve
+     against the viewport.) Only reached side-by-side; stacked, the rule below wins. */
+  padding: 14px max(22px, (100% - 350px - 820px) / 2) 28px;
+}
 .advisor {
   width: 350px; min-width: 350px; overflow-y: auto;
   border-left: 1px solid var(--border); background: var(--card-tint); padding: 16px;
+}
+/* The advisor sits beside the days only where both fit: it holds 350px whatever happens,
+   so below ~1110px it was squeezing the day cards until they overflowed their pane. A
+   tablet gets the stacked layout the phone always had. */
+@media (max-width: 1110px) {
+  .plan-layout { flex-direction: column; overflow-y: auto; }
+  .plan-days { overflow: visible; padding: 10px 12px; }
+  .advisor {
+    width: 100%; min-width: 0; overflow: visible;
+    border-left: none; border-top: 1px solid var(--border);
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
 }
 .day-card {
   background: var(--card); border: 1px solid var(--border);
@@ -1165,7 +1188,7 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 .exp-add-row { display: block; }
 /* Enough room to put Amount and Date on one line; the title and the category/city pair
    stay full width so nothing ends up in a lonely half-row. */
-@media (min-width: 900px) {
+@container (min-width: 620px) {
   .exp-add-row {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     /* start, not end: the currency select makes the Amount cell a few pixels taller, and a
@@ -1408,13 +1431,6 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
   .map-legend-bar .legend { justify-content: center; }
   /* Photos are taller on phones, so the category stripe has to match. */
   .pcard-cat { height: 190px; }
-  .plan-layout { flex-direction: column; overflow-y: auto; }
-  .plan-days { overflow: visible; padding: 10px 12px; }
-  .advisor {
-    width: 100%; min-width: 0; overflow: visible;
-    border-left: none; border-top: 1px solid var(--border);
-    padding-bottom: calc(16px + env(safe-area-inset-bottom));
-  }
   .day-head { flex-wrap: wrap; }
 
   /* Wide tables scroll sideways instead of breaking the page */
@@ -1563,30 +1579,27 @@ svg.lucide { flex: 0 0 auto; vertical-align: -0.15em; }
    is visible at once. Everything degrades to the single-column layout below the breakpoint. */
 .ov-cols { display: grid; grid-template-columns: 1fr; gap: 0 30px; }
 
-@media (min-width: 1400px) {
-  /* Overview: trip details beside the leg list. align-items:start keeps the shorter
-     column from stretching to match the taller one. */
+/* Stacked card lists flow into however many columns the content column can hold at this
+   width each. `columns` (not grid) keeps every card's natural height, and a column-width
+   rather than a column-count means the count follows the room available — a fixed count
+   put three ~320px columns on a wide screen once the content column was capped. */
+.todo-list-wide, .bcard-list-wide { columns: 430px; column-gap: 20px; }
+.todo-list-wide > *, .bcard-list-wide > * { break-inside: avoid; }
+
+/* Overview: trip details beside the leg list once both fit. align-items:start keeps the
+   shorter column from stretching to match the taller one. */
+@container (min-width: 780px) {
   .ov-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   /* The first heading in each column would otherwise inherit a big top margin and
      misalign the two columns' tops. */
   .ov-col > h2:first-child { margin-top: 6px; }
+}
 
-  /* Stacked card lists become columns. `columns` (not grid) keeps each card's natural
-     height and simply flows the list into the available width. */
-  .todo-list-wide, .bcard-list-wide { columns: 2; column-gap: 20px; }
-  .todo-list-wide > *, .bcard-list-wide > * { break-inside: avoid; }
-
-  /* A textarea spanning 2000px is unreadable regardless of available room. */
+@media (min-width: 1400px) {
+  /* A textarea spanning the whole column is unreadable regardless of available room. */
   textarea { max-width: 1100px; }
   .narrow { --col: 1000px; }
   .wide { --col: 1180px; }
-}
-
-@media (min-width: 2000px) {
-  .todo-list-wide, .bcard-list-wide { columns: 3; }
-  /* Keep line length sane on very large displays — beyond this the layout stops gaining
-     from more width and just hurts readability. */
-  .main > .pad { max-width: 2100px; }
 }
 
 /* ---------- reduced motion ----------

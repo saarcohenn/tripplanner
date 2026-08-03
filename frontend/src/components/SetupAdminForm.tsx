@@ -24,7 +24,7 @@ export default function SetupAdminForm({ onDone }: { onDone: (user: User) => voi
   }
 
   return (
-    <div className="pad narrow auth-screen">
+    <div className="pad auth-screen">
       <h1>TripPlanner</h1>
       <h2>Create the admin account</h2>
       <p className="hint">

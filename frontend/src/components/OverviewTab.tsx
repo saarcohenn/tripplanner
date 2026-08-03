@@ -105,7 +105,7 @@ export default function OverviewTab({ detail, refresh }: { detail: TripDetail; r
   }
 
   return (
-    <div className="pad">
+    <div className="pad wide">
       {/* Driven by the form (not the saved trip) so it re-counts live as you pick dates. */}
       <BoardingPass trip={form} legs={legs} places={places} />
       {/* Two independent groups — side by side once there's width for it, so a wide screen
