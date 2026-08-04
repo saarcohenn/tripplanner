@@ -7,6 +7,7 @@ import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from
 import { planPrompt, advisorPrompt, importPrompt, insightPrompt, mergePrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
 import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
+import { fetchSharedList } from "./gmapsList.js";
 
 export const api = Router();
 api.use(requireUser);
@@ -858,7 +859,11 @@ api.post("/trips/:id/fetch-photos", wrap(async (req, res) => {
 // manual Takeout export (takeout.google.com → "Saved" → download → open the list's .json file
 // under Takeout/Saved/). Each list exports as a GeoJSON-ish FeatureCollection; we parse it
 // defensively since the exact shape has drifted across Takeout versions.
-type ImportCandidate = { name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string };
+type ImportCandidate = {
+  name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string;
+  /** Only the share-link route supplies this — Takeout exports don't carry the pin's own note. */
+  note?: string;
+};
 
 function parseTakeoutSavedPlaces(raw: any): { items: ImportCandidate[]; skipped: number } {
   const features = Array.isArray(raw?.features) ? raw.features : [];
@@ -903,6 +908,28 @@ api.post(`/trips/:id/places/import-preview`, wrap((req, res) => {
   });
 }));
 
+// Same preview, from a shared-list link instead of a Takeout file. Both hand the identical
+// candidate shape to /places/import, so there is only ever one path that writes.
+api.post(`/trips/:id/places/import-link`, wrap(async (req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const url = String(req.body.url || "").trim();
+  if (!url) throw Object.assign(new Error("Paste the share link for the list"), { status: 400 });
+
+  const { listName, items, skipped } = await fetchSharedList(url);
+  if (items.length === 0) {
+    throw Object.assign(new Error("That list has no places in it."), { status: 400 });
+  }
+  const existing = new Set(
+    db.prepare("SELECT name FROM places WHERE trip_id = ?").all(tripId).map((p: any) => String(p.name).trim().toLowerCase())
+  );
+  res.json({
+    list_name: listName,
+    items: items.map((it) => ({ ...it, exists: existing.has(it.name.trim().toLowerCase()) })),
+    skipped,
+  });
+}));
+
 api.post(`/trips/:id/places/import`, wrap((req, res) => {
   const tripId = Number(req.params.id);
   assertTripWrite(req.user.id, tripId);
@@ -914,7 +941,14 @@ api.post(`/trips/:id/places/import`, wrap((req, res) => {
      VALUES (?, NULL, ?, ?, ?, ?, 90, 'want', ?, ?, 'active', 'import')`
   );
   const tx = db.transaction((rows: ImportCandidate[]) => {
-    for (const it of rows) insert.run(tripId, it.name, category, it.lat, it.lng, it.address || "", it.gmaps_url || "");
+    for (const it of rows) {
+      // A candidate that carries a `note` field at all came from the share link, and its note is
+      // authoritative even when empty — the address there restates the name and is already
+      // covered by the coordinates and the Maps link. Takeout candidates have no note field, so
+      // they keep the address as the stand-in they always had.
+      const notes = typeof it.note === "string" ? it.note : (it.address || "");
+      insert.run(tripId, it.name, category, it.lat, it.lng, notes, it.gmaps_url || "");
+    }
   });
   tx(items);
   bumpPlanVersion(tripId);

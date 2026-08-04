@@ -1311,6 +1311,14 @@ a { color: var(--accent-dark); }
 .import-trip { border-left: 3px solid var(--accent); }
 /* Already in the trip: shown rather than hidden, so you can see the whole of what was understood. */
 .import-row.already { background: var(--card-tint); opacity: 0.75; }
+/* A pin's own note, in the Google-Maps-list import review. Distinguished from the address
+   beneath it because it's the one line of that row the traveller wrote themselves. */
+/* Logical, not left: these notes are frequently RTL (the list that prompted the feature is in
+   Hebrew), and dir="auto" flips the text — the accent bar has to follow it. */
+.import-note {
+  font-size: 12px; color: var(--olive); margin-top: 2px;
+  padding-inline-start: 8px; border-inline-start: 2px solid var(--border-strong); white-space: pre-wrap;
+}
 .import-badge {
   display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
   font-size: 11px; color: var(--muted); background: var(--bg);

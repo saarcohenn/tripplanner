@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Download, Globe, ImageOff, Map as MapIcon, Sparkles, Upload, X } from "lucide-react";
+import { Camera, Download, Globe, ImageOff, Link2, Map as MapIcon, Sparkles, Upload, X } from "lucide-react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
@@ -8,7 +8,11 @@ import TripMap, { CATEGORY_COLORS } from "./TripMap";
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
 
 type NameHit = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
-type ImportCandidate = { name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string; exists: boolean };
+type ImportCandidate = {
+  name: string; address: string; lat: number | null; lng: number | null; gmaps_url: string; exists: boolean;
+  /** Your own note on the pin. Only the share-link route has these — Takeout drops them. */
+  note?: string;
+};
 
 function FilterIcon() {
   return (
@@ -69,7 +73,17 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [importCategory, setImportCategory] = useState("sight");
   const [importing, setImporting] = useState(false);
   const [importFileName, setImportFileName] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [importSource, setImportSource] = useState("");
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  /** Both routes land here — same candidate shape, same review list, same apply. */
+  function receive(r: { items: ImportCandidate[]; skipped: number }, source: string) {
+    setImportItems(r.items);
+    setImportSkipped(r.skipped);
+    setImportSource(source);
+    setImportSelected(new Set(r.items.map((_, i) => i).filter((i) => !r.items[i].exists)));
+  }
 
   async function onImportFile(file: File) {
     setImportFileName(file.name);
@@ -79,11 +93,25 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     try {
       const text = await file.text();
       const r = await api.post<{ items: ImportCandidate[]; skipped: number }>(`/trips/${trip.id}/places/import-preview`, { data: text });
-      setImportItems(r.items);
-      setImportSkipped(r.skipped);
-      setImportSelected(new Set(r.items.map((it, i) => i).filter((i) => !r.items[i].exists)));
+      receive(r, file.name);
     } catch (e: any) {
       setImportError(e.message || "Couldn't read that file");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  async function onImportLink() {
+    setImportError("");
+    setImportItems(null);
+    setImportBusy(true);
+    try {
+      const r = await api.post<{ items: ImportCandidate[]; skipped: number; list_name: string }>(
+        `/trips/${trip.id}/places/import-link`, { url: importUrl }
+      );
+      receive(r, r.list_name ? `“${r.list_name}”` : "that list");
+    } catch (e: any) {
+      setImportError(e.message || "Couldn't read that list");
     } finally {
       setImportBusy(false);
     }
@@ -385,28 +413,53 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
 
       {importOpen && (
         <div className="add-row" style={{ display: "block" }}>
+          {/* Paste a link is the fast path; Takeout is the one Google actually supports, so it
+              stays as the fallback for a list that isn't shared. */}
+          <label className="block">Share link to a Google Maps list
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                dir="ltr" className="grow" placeholder="https://maps.app.goo.gl/…"
+                value={importUrl} onChange={(e) => setImportUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && importUrl.trim()) onImportLink(); }}
+              />
+              <button className="primary btn-icon" onClick={onImportLink} disabled={importBusy || !importUrl.trim()}>
+                <Link2 size={14} /> Read list
+              </button>
+            </div>
+          </label>
           <p className="hint">
-            Google doesn't offer a live API for your Saved/Starred lists — export one via{" "}
-            <strong>takeout.google.com</strong> (deselect all, pick only "Saved", export, then open the list's
-            <code>.json</code> file inside <code>Takeout/Saved/</code>) and upload it here.
+            In Google Maps: open the list → <strong>Share</strong> → copy the link (it has to be shared,
+            or Google won't hand it over). This brings each pin's own note across, which the export below
+            doesn't include.
           </p>
-          <div className="row" style={{ gap: 8, alignItems: "center" }}>
-            <input
-              ref={importFileRef} type="file" accept=".json,application/json" style={{ display: "none" }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ""; }}
-            />
-            <button className="primary btn-icon" onClick={() => importFileRef.current?.click()}>
-              <Upload size={14} /> Choose file
-            </button>
-            {importFileName && <span className="hint" dir="auto">{importFileName}</span>}
-          </div>
-          {importBusy && <p className="hint">Reading file…</p>}
+
+          <details>
+            <summary className="hint">Or upload a Google Takeout export (works for private lists)</summary>
+            <p className="hint">
+              Google offers no supported API for saved lists, so the guaranteed route is a manual export:{" "}
+              <strong>takeout.google.com</strong> → deselect all → pick only "Saved" → export, then open the
+              list's <code>.json</code> file inside <code>Takeout/Saved/</code> and upload it here.
+            </p>
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input
+                ref={importFileRef} type="file" accept=".json,application/json" style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ""; }}
+              />
+              <button className="btn-icon" onClick={() => importFileRef.current?.click()}>
+                <Upload size={14} /> Choose file
+              </button>
+              {importFileName && <span className="hint" dir="auto">{importFileName}</span>}
+            </div>
+          </details>
+
+          {importBusy && <p className="hint">Reading the list…</p>}
           {importError && <p className="hint" style={{ color: "var(--danger)" }}>{importError}</p>}
           {importItems && (
             <>
               <div className="row spread" style={{ marginTop: 8 }}>
                 <p className="hint">
                   Found {importItems.length} place{importItems.length === 1 ? "" : "s"}
+                  {importSource ? <> in <strong dir="auto">{importSource}</strong></> : null}
                   {importSkipped > 0 ? ` (${importSkipped} skipped — no name/address)` : ""}. Already-in-trip places are unchecked.
                 </p>
                 <label className="block">Add as category
@@ -421,6 +474,7 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                     <input type="checkbox" checked={importSelected.has(i)} onChange={() => toggleImportSelected(i)} />
                     <span className="grow">
                       <strong>{it.name}</strong>{it.exists && <span className="hint"> — already in trip</span>}
+                      {it.note && <div className="import-note" dir="auto">{it.note}</div>}
                       {it.address && <div className="hint">{it.address}</div>}
                     </span>
                   </label>
