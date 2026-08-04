@@ -185,12 +185,15 @@ body {
 /* Bell + theme toggle share one cluster pinned to the sidebar's top-right corner. */
 .sidebar-tools { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 2px; }
 .notif-wrap { position: relative; }
-.notif-bell, .theme-toggle {
+/* Every chrome icon button in the shell — bell, theme, sign-out, hamburger — is one control
+   with one look: no box of its own, just an icon that tints its patch on hover. */
+.notif-bell, .theme-toggle, .sidebar-logout, .hamburger {
   position: relative;
   background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted);
   padding: 4px 7px; border-radius: 8px; line-height: 1;
 }
-.notif-bell:hover, .theme-toggle:hover:not(:disabled) {
+.notif-bell:hover, .theme-toggle:hover:not(:disabled),
+.sidebar-logout:hover:not(:disabled), .hamburger:hover:not(:disabled) {
   background: var(--card-tint); color: var(--text); border: none; box-shadow: none;
 }
 .notif-badge {
@@ -274,6 +277,15 @@ body {
 .sidebar-app-nav button:hover:not(:disabled) { transform: none; box-shadow: none; }
 .sidebar-app-nav button:hover { background: var(--card-tint); color: var(--text); }
 .sidebar-app-nav button.active { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
+
+/* Who you're signed in as, and the way out — the sign-out sits opposite the name so it reads as
+   belonging to it. Shared by the sidebar footer and the mobile drawer, which is the only place
+   the footer isn't reachable from. */
+.sidebar-user { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sidebar-user .hint {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0;
+}
+.sidebar-logout { flex: 0 0 auto; display: inline-flex; align-items: center; }
 
 /* The "plan generated" light is the one status signal in the trip list — it was a muted
    olive that vanished against the cream background, so it's now a saturated green with a
@@ -602,13 +614,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 /* Chrome-less buttons (nav rows, card headers, icon affordances) are part of a surface
    rather than sitting on one — they tint on hover instead of lifting off the page. */
 .tab, .trip-name, .trip-del, .drawer-item, .drawer-back, .bcard-head, .leg-summary,
-.leg-drag-handle, .notif-bell, .theme-toggle, .sidebar-app-nav button, .chip-toggle {
+.leg-drag-handle, .notif-bell, .theme-toggle, .sidebar-logout, .hamburger,
+.sidebar-app-nav button, .chip-toggle {
   transform: none;
 }
 .tab:hover:not(:disabled), .trip-name:hover:not(:disabled), .trip-del:hover:not(:disabled),
 .drawer-item:hover:not(:disabled), .drawer-back:hover:not(:disabled), .bcard-head:hover:not(:disabled),
 .leg-summary:hover:not(:disabled), .leg-drag-handle:hover:not(:disabled), .notif-bell:hover:not(:disabled),
-.theme-toggle:hover:not(:disabled), .sidebar-app-nav button:hover:not(:disabled),
+.theme-toggle:hover:not(:disabled), .sidebar-logout:hover:not(:disabled),
+.hamburger:hover:not(:disabled), .sidebar-app-nav button:hover:not(:disabled),
 .chip-toggle:hover:not(:disabled) {
   transform: none;
 }
@@ -1548,6 +1562,9 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 }
 .drawer-app { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
 .drawer-app h4 { margin-top: 0; }
+/* The sidebar footer is hidden on phones, so the drawer carries the account row instead —
+   otherwise signing out means going all the way into Profile. */
+.drawer-user { margin-top: 10px; padding: 8px 4px 0; border-top: 1px solid var(--border); }
 .drawer-item {
   display: flex; align-items: center; width: 100%; text-align: left;
   background: none; border: none; box-shadow: none;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Bell, Compass, Hourglass, Menu, Moon, Plus, Sun, TriangleAlert, X,
+  ArrowLeft, Bell, Compass, Hourglass, LogOut, Menu, Moon, Plus, Sun, TriangleAlert, X,
 } from "lucide-react";
 import { api } from "./api";
 import type { AppConfig, Notification, PlanJob, Trip, TripDetail, User } from "./types";
@@ -331,7 +331,14 @@ export default function App() {
               <TriangleAlert size={13} /> No LLM key set — plan generation disabled. Add one in Profile.
             </p>
           )}
-          <p className="hint" dir="auto">{currentUser?.display_name || currentUser?.email}</p>
+          <div className="sidebar-user">
+            <span className="hint grow" dir="auto" title={currentUser?.email}>
+              {currentUser?.display_name || currentUser?.email}
+            </span>
+            <button className="sidebar-logout" title="Log out" aria-label="Log out" onClick={logout}>
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -378,6 +385,15 @@ export default function App() {
                 <button key={t} className={t === tab ? "drawer-item active" : "drawer-item"}
                   onClick={() => { setTab(t); setMenuOpen(false); }}>{t}</button>
               ))}
+              <div className="sidebar-user drawer-user">
+                <span className="hint grow" dir="auto" title={currentUser?.email}>
+                  {currentUser?.display_name || currentUser?.email}
+                </span>
+                <button className="sidebar-logout" title="Log out" aria-label="Log out"
+                  onClick={() => { setMenuOpen(false); void logout(); }}>
+                  <LogOut size={16} />
+                </button>
+              </div>
             </div>
           </nav>
         </div>

@@ -829,9 +829,26 @@ api.put("/profile", wrap((req, res) => {
   const cols = PROFILE_FIELDS.filter((f) =>
     f in req.body && req.body[f] != null && !(f === "llm_api_key" && String(req.body[f]).startsWith("saved:"))
   );
+  const values = cols.map((c) => String(req.body[c]));
+
+  // The display name isn't just a label: room invites accept it in place of an email, so two
+  // accounts sharing one would make an invite a coin flip. Validated here rather than folded
+  // into PROFILE_FIELDS, which writes whatever it is given.
+  if ("display_name" in req.body) {
+    const name = String(req.body.display_name ?? "").trim();
+    if (!name) throw Object.assign(new Error("Display name can't be empty"), { status: 400 });
+    if (name.length > 40) throw Object.assign(new Error("Display name is limited to 40 characters"), { status: 400 });
+    const taken = db.prepare(
+      "SELECT id FROM users WHERE LOWER(display_name) = LOWER(?) AND id != ?"
+    ).get(name, req.user.id);
+    if (taken) throw Object.assign(new Error("Someone else already uses that name — pick another"), { status: 409 });
+    cols.push("display_name");
+    values.push(name);
+  }
+
   if (cols.length) {
     db.prepare(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
-      .run(...cols.map((c) => String(req.body[c])), req.user.id);
+      .run(...values, req.user.id);
   }
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   res.json({ user: safeUser(user as any) });

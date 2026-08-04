@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import { api } from "../api";
 import type { LlmDefaults, LlmUsage, ProviderPlan, User } from "../types";
 import CurrencySelect from "./CurrencySelect";
@@ -180,6 +181,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
   const [priceOut, setPriceOut] = useState("");
   const [monthlyBudget, setMonthlyBudget] = useState("");
   const [planSystemPrompt, setPlanSystemPrompt] = useState("");
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     api.get<LlmDefaults>("/llm/defaults").then(setDefaults).catch(() => {});
@@ -196,6 +198,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
     setMonthlyBudget(currentUser.llm_monthly_budget || "");
     setHomeCurrency(currentUser.home_currency || "USD");
     setPlanSystemPrompt(currentUser.plan_system_prompt || "");
+    setDisplayName(currentUser.display_name || "");
   }, [currentUser]);
 
   async function loadModels() {
@@ -221,6 +224,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
 
   async function save() {
     const r = await api.put<{ user: User }>("/profile", {
+      display_name: displayName,
       llm_provider: provider,
       llm_api_key: apiKey,
       llm_model: model || (defaults?.default_models?.[provider] ?? ""),
@@ -233,6 +237,17 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
     });
     onUserUpdate(r.user);
     setStatus("Saved.");
+  }
+
+  // Save is the one button that writes everything on this page, so a rejected name (blank, too
+  // long, already taken) has to surface rather than becoming an unhandled rejection.
+  async function saveAll() {
+    setStatus(null);
+    try {
+      await save();
+    } catch (e: any) {
+      setStatus(e.message);
+    }
   }
 
   async function test() {
@@ -252,11 +267,21 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
 
   return (
     <div className="pad narrow">
-      <h2>Profile</h2>
+      <div className="row spread">
+        <h2>Profile</h2>
+        <button className="btn-icon" onClick={logout}><LogOut size={14} /> Log out</button>
+      </div>
+      <label className="block">Display name
+        <input
+          dir="auto" maxLength={40} placeholder={currentUser.email}
+          value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+        />
+      </label>
       <p className="hint" dir="auto">
-        {currentUser.display_name || currentUser.email} · {currentUser.email} · {currentUser.role}
+        What you're called in the sidebar, on shared trips, and in room invites — which is why it has
+        to be yours alone. Saved with everything else at the bottom of this page.
       </p>
-      <button onClick={logout}>Log out</button>
+      <p className="hint" dir="auto">{currentUser.email} · {currentUser.role}</p>
 
       <h2>LLM connection</h2>
       <p className="hint">
@@ -333,7 +358,7 @@ export default function ProfileTab({ currentUser, onUserUpdate, logout }: {
       />
 
       <div className="row">
-        <button className="primary" onClick={save}>Save</button>
+        <button className="primary" onClick={saveAll}>Save</button>
         <button onClick={test} disabled={testing}>{testing ? "Testing…" : "Test LLM connection"}</button>
       </div>
       {status && <p dir="auto">{status}</p>}
