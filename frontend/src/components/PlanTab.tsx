@@ -147,11 +147,28 @@ export default function PlanTab({
     return id != null ? placeById.get(id) || null : null;
   })();
 
+  // The strip fades out at whichever edge still has days behind it, so a cut-off chip reads as
+  // "there's more this way" instead of as a chip that got clipped.
   const stripRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = useCallback(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setEdges({ left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 });
+  }, []);
   useEffect(() => {
     stripRef.current?.querySelector<HTMLElement>(".day-chip.active")
       ?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [activeDate]);
+    // The scroll above is smooth, so measure once it has settled as well as right away.
+    updateEdges();
+    const t = window.setTimeout(updateEdges, 400);
+    return () => window.clearTimeout(t);
+  }, [activeDate, dates, updateEdges]);
+  useEffect(() => {
+    window.addEventListener("resize", updateEdges);
+    return () => window.removeEventListener("resize", updateEdges);
+  }, [updateEdges]);
 
   // ---------- mutations ----------
   function patchDay(patch: Partial<PlanDay>, at = dayIndex) {
@@ -419,26 +436,30 @@ export default function PlanTab({
         {/* Day navigation. In edit mode each chip is also a drop target, which is how an item
             moves to another day while only one day is on screen. */}
         <div className="day-nav">
-          <button className="icon-btn" aria-label="Previous day" disabled={dayIndex <= 0}
-            onClick={() => setActiveDate(dates[dayIndex - 1])}><ChevronLeft size={16} /></button>
-          <div className="day-strip" ref={stripRef}>
-            {doc.days.map((d) => (
-              <button
-                key={d.date}
-                data-drop={editing ? "day" : undefined}
-                data-date={d.date}
-                className={`day-chip${d.date === activeDate ? " active" : ""}${over === `day-${d.date}` ? " drag-over" : ""}`}
-                onClick={() => setActiveDate(d.date)}
-              >
-                <span className="day-chip-dow">{weekday(d.date)}</span>
-                <span className="day-chip-date">{fmtDayShort(d.date)}</span>
-                <span className="day-chip-city" dir="auto">{d.city || "—"}</span>
-                <span className="day-chip-count">{d.items?.length || 0}</span>
-              </button>
-            ))}
+          <button className="day-nav-arrow" aria-label="Previous day" disabled={dayIndex <= 0}
+            onClick={() => setActiveDate(dates[dayIndex - 1])}><ChevronLeft size={18} /></button>
+          <div className="day-strip-wrap">
+            <span className={`strip-fade left${edges.left ? " show" : ""}`} aria-hidden="true" />
+            <div className="day-strip" ref={stripRef} onScroll={updateEdges}>
+              {doc.days.map((d) => (
+                <button
+                  key={d.date}
+                  data-drop={editing ? "day" : undefined}
+                  data-date={d.date}
+                  className={`day-chip${d.date === activeDate ? " active" : ""}${over === `day-${d.date}` ? " drag-over" : ""}`}
+                  onClick={() => setActiveDate(d.date)}
+                >
+                  <span className="day-chip-dow">{weekday(d.date)}</span>
+                  <span className="day-chip-date">{fmtDayShort(d.date)}</span>
+                  <span className="day-chip-city" dir="auto">{d.city || "—"}</span>
+                  <span className="day-chip-count">{d.items?.length || 0}</span>
+                </button>
+              ))}
+            </div>
+            <span className={`strip-fade right${edges.right ? " show" : ""}`} aria-hidden="true" />
           </div>
-          <button className="icon-btn" aria-label="Next day" disabled={dayIndex < 0 || dayIndex >= dates.length - 1}
-            onClick={() => setActiveDate(dates[dayIndex + 1])}><ChevronRight size={16} /></button>
+          <button className="day-nav-arrow" aria-label="Next day" disabled={dayIndex < 0 || dayIndex >= dates.length - 1}
+            onClick={() => setActiveDate(dates[dayIndex + 1])}><ChevronRight size={18} /></button>
         </div>
 
         {missingDays > 0 && (

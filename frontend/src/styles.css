@@ -1068,15 +1068,47 @@ a { color: var(--accent-dark); }
    drop target away. */
 .day-nav {
   position: sticky; top: 0; z-index: 3;
-  display: flex; align-items: stretch; gap: 6px;
+  display: flex; align-items: center; gap: 4px;
   padding: 8px 0; margin-bottom: 2px;
   background: var(--bg); border-bottom: 1px solid var(--border);
 }
+/* Ghost arrows: the chips are the thing being navigated, so the controls stay quiet until
+   you reach for them, and go properly invisible at the ends of the trip. */
+.day-nav-arrow {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  background: none; border: 1px solid transparent; box-shadow: none; color: var(--muted);
+  transition: background-color 0.18s var(--ease), color 0.18s var(--ease),
+              border-color 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+.day-nav-arrow:hover:not(:disabled) {
+  background: var(--accent-tint); border-color: var(--accent); color: var(--accent-dark);
+  box-shadow: none; transform: none;
+}
+.day-nav-arrow:disabled { opacity: 0.25; }
+
+.day-strip-wrap { position: relative; flex: 1; min-width: 0; }
 .day-strip {
   display: flex; gap: 6px; overflow-x: auto; scroll-behavior: smooth;
-  flex: 1; min-width: 0; padding-bottom: 2px;
-  scrollbar-width: thin;
+  min-width: 0; padding: 2px 2px 4px;
+  /* The arrows and the edge fades already say "there is more this way" — a raw scrollbar
+     under the chips only added a grey slab. */
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.day-strip::-webkit-scrollbar { display: none; }
+/* Fades over the strip rather than a mask on it, so they can cross-fade: each one is only
+   painted at an edge that still has days behind it. */
+.strip-fade {
+  position: absolute; top: 0; bottom: 0; width: 34px; pointer-events: none;
+  opacity: 0; transition: opacity 0.25s var(--ease-out);
+  /* The chips are positioned too (for the count badge), so at z-index auto they paint in DOM
+     order — which put the left fade, the one sibling that comes before the strip, underneath
+     them. Both fades sit above the chips explicitly. */
+  z-index: 2;
+}
+.strip-fade.show { opacity: 1; }
+.strip-fade.left { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+.strip-fade.right { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
 .day-chip {
   flex: 0 0 auto; display: grid; gap: 1px; justify-items: start;
   padding: 6px 12px; border-radius: 12px; text-align: left;
