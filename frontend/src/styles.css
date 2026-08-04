@@ -1284,6 +1284,39 @@ a { color: var(--accent-dark); }
 }
 .survey-modes { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* ---------- describing a trip in prose (Import tab, and the Plan tab's empty state) ---------- */
+.import-modes { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+.trip-import { display: grid; gap: 10px; margin: 10px 0 4px; }
+.trip-import textarea { width: 100%; }
+.trip-import .row { align-items: center; flex-wrap: wrap; gap: 10px; }
+.trip-import > .hint { margin: 0; }
+
+.import-proposal { display: grid; gap: 12px; }
+.import-section { display: grid; gap: 4px; }
+.import-section h4 {
+  margin: 0 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+}
+/* One tick per thing that would land. Rows read top-to-bottom as a list of consequences, so the
+   title carries the weight and everything qualifying it sits under it in muted text. */
+.import-row {
+  display: flex; align-items: flex-start; gap: 9px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 11px; font-size: 13px;
+}
+.import-row:hover { border-color: var(--border-strong); }
+.import-row input[type="checkbox"] { margin-top: 2px; flex: 0 0 auto; }
+.import-row .grow { display: grid; gap: 2px; min-width: 0; }
+.import-row strong { font-weight: 600; }
+.import-meta { font-size: 12px; color: var(--muted); }
+.import-trip { border-left: 3px solid var(--accent); }
+/* Already in the trip: shown rather than hidden, so you can see the whole of what was understood. */
+.import-row.already { background: var(--card-tint); opacity: 0.75; }
+.import-badge {
+  display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
+  font-size: 11px; color: var(--muted); background: var(--bg);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+
 /* ---------- place cards ---------- */
 .place-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

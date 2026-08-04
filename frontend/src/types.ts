@@ -53,6 +53,8 @@ export type Trip = {
   room_owner_id: number | null;
   room_owner_name: string | null;
   room_member_count: number;
+  /** The caller's role in this trip's room — a client-side hint; the server checks every write. */
+  my_role: "owner" | "editor" | "viewer";
   created_at: string;
   updated_at: string;
 };
@@ -210,6 +212,22 @@ export type TripDetail = {
   todos: Todo[];
   expenses: Expense[];
   plan: PlanRow | null;
+};
+
+/**
+ * What the LLM proposes adding to a trip that already exists. Nothing here has been written —
+ * every row carries `exists` so the UI can show what the trip already has, and the user ticks
+ * what actually lands.
+ */
+export type ImportProposal = {
+  summary: string;
+  /** Only fields the trip hasn't got yet — this never proposes replacing something you set. */
+  trip: Partial<Pick<Trip, "name" | "trip_type" | "start_date" | "end_date" | "home_city" | "budget" | "currency">>;
+  legs: (Partial<Leg> & { city: string; exists: boolean; leg_id: number | null })[];
+  places: (Partial<Place> & { name: string; city: string; existing_leg_id: number | null; exists: boolean })[];
+  todos: (Partial<Todo> & { text: string; exists: boolean })[];
+  bookings: (Partial<Booking> & { title: string; city: string | null; exists: boolean })[];
+  notes: string;
 };
 
 /** Global admin-only config (Settings tab). Per-user LLM/budget/prompt live on User (Profile tab). */

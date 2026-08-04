@@ -18,6 +18,7 @@ import DayMap, { DayStop } from "./DayMap";
 import PlaceInsightPanel from "./PlaceInsightPanel";
 import TimeField from "./TimeField";
 import TransportSurvey from "./TransportSurvey";
+import TripImportPanel from "./TripImportPanel";
 import { CATEGORY_COLORS } from "./TripMap";
 
 const KIND_ICON: Record<string, typeof MapPin> = {
@@ -381,8 +382,20 @@ export default function PlanTab({
         <p className="hint">
           {plannable
             ? "Building it yourself creates one card per day, already in the right city, with your bookings and stated arrival times dropped in. You then drag your places onto them."
-            : "This trip has no dates yet. Set the trip's start and end (or a city's arrive/depart dates) on the Overview tab, and the days will appear here."}
+            : "This trip has no dates yet — both routes need days to hang the plan off. Fill them in on the Overview tab, or just say what you're thinking below and let it work them out."}
         </p>
+
+        {/* Neither route works on an empty trip, and filling the Overview in by hand first is a
+            lot to ask of someone who only knows "ten days in Portugal in October". */}
+        <h3>Or just describe it</h3>
+        <p className="hint">
+          Say where you're going and what you want to do, in whatever words you'd use. It fills in the
+          cities, dates, places and bookings you mention — then come back here and lay out the days.
+        </p>
+        <TripImportPanel
+          tripId={trip.id} llmReady={llmReady} onApplied={refresh}
+          placeholder={"e.g. Ten days in Portugal in October — Lisbon first, then three days in Porto.\nWant to see Belém Tower, the Jerónimos Monastery and Livraria Lello, and do a port cellar tour.\nFlying out of Tel Aviv, budget around €2000."}
+        />
       </div>
     );
   }

@@ -155,6 +155,63 @@ Reply as JSON with this exact shape:
   };
 }
 
+/**
+ * The same extraction as importPrompt, but into a trip that already exists. The whole difference
+ * is context: the model is shown what the trip already holds so it proposes what's *missing*
+ * rather than a second copy of everything, and attaches new places to the cities already there.
+ *
+ * It only ever proposes — nothing here writes. The user picks what lands (see /import/preview).
+ */
+export function mergePrompt(b: TripBundle, text: string): { system: string; user: string } {
+  return {
+    system: `You extract structured trip data from what a traveller tells you and fit it into a trip that ALREADY EXISTS. You are adding to their plan, never replacing it and never second-guessing it.
+
+Rules:
+- Extract ONLY what the text actually says. You must NEVER invent cities, attractions, restaurants, hotels or dates the traveller did not mention — not even obvious ones, not even to be helpful. An empty list is the correct answer when the text names nothing.
+- The trip's current contents are listed below. Anything already there must NOT be proposed again. When the text mentions a city the trip already has, put that city's existing id in "existing_leg_id" and do not add a new leg for it.
+- Attach every place to the city it belongs to by name in "city", matching the leg list below where the city is already there.
+- Trip-level fields: propose a value ONLY where the trip's current value is missing or unknown. If the traveller already set a name, dates, home city, budget or currency, leave that field out entirely — you are filling blanks, not correcting them.
+- Dates: only give a date the text actually determines. "Ten days in October" without a year or a start day is not a date — leave it null and say so in the summary.
+- Estimate lat/lng only for well-known cities and famous places you are confident about; otherwise null.
+- Keep city and place names in English when a well-known English name exists, otherwise keep the original. Any input language is fine, including Hebrew.
+
+Reply with ONLY a JSON object, no prose.`,
+    user: `${bundleText(b)}
+
+WHAT THE TRAVELLER SAYS (this is the new information to fit in):
+${text}
+
+Reply as JSON with this exact shape:
+{
+  "summary": "1-3 sentences: what you understood, and anything you deliberately left out because the text didn't pin it down",
+  "trip": {
+    "name": "string or null", "trip_type": "oneway|round|multicity or null",
+    "start_date": "YYYY-MM-DD or null", "end_date": "YYYY-MM-DD or null",
+    "home_city": "string or null", "budget": number or null, "currency": "3-letter code or null"
+  },
+  "legs": [
+    { "city": "string", "country": "string", "arrive_date": "YYYY-MM-DD or null",
+      "arrive_time": "HH:MM local, only if stated, else null",
+      "depart_date": "YYYY-MM-DD or null", "depart_time": "HH:MM local, only if stated, else null",
+      "lat": number or null, "lng": number or null }
+  ],
+  "places": [
+    { "name": "string", "city": "which city it belongs to", "existing_leg_id": leg id from the list above or null,
+      "category": "sight|food|nature|museum|shopping|nightlife|other", "duration_min": estimated minutes,
+      "priority": "must|want|maybe", "lat": number or null, "lng": number or null, "notes": "short note or empty" }
+  ],
+  "todos": [ { "text": "string", "category": "general|booking|documents|packing|money", "due_date": "YYYY-MM-DD or null" } ],
+  "bookings": [
+    { "kind": "flight|stay|train|bus|ferry|car|activity|other", "title": "string", "city": "city or null",
+      "date": "YYYY-MM-DD or null", "end_date": "YYYY-MM-DD or null", "cost": number or null,
+      "currency": "3-letter code or null", "ref": "confirmation code or empty", "notes": "" }
+  ],
+  "notes": "anything stated that matters to planning but fits none of the fields above (pace, dietary needs, who is travelling), or an empty string"
+}
+Every list may be empty. Propose nothing the trip already has.`,
+  };
+}
+
 export function importPrompt(conversationText: string): { system: string; user: string } {
   return {
     system: `You extract structured trip data from a travel-planning conversation (any language, including Hebrew). Extract ONLY what the conversation actually contains — do not invent places or dates. Keep place/city names in English when a well-known English name exists, otherwise keep the original. Estimate lat/lng for well-known cities and famous places when you are confident; otherwise use null.

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
-import { planPrompt, advisorPrompt, importPrompt, insightPrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
+import { planPrompt, advisorPrompt, importPrompt, insightPrompt, mergePrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
 import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
 
@@ -227,14 +227,17 @@ api.get("/trips", wrap((req, res) => {
   if (rooms.length === 0) return res.json([]);
   seedDemoIfEmpty(rooms[0]);
   const placeholders = rooms.map(() => "?").join(",");
+  // my_role rides along so the client can tell a read-only trip apart before it tries to write
+  // to one. Every mutating route still checks for itself — this only spares the pointless 403.
   res.json(db.prepare(
     `SELECT t.*, r.name AS room_name, r.owner_id AS room_owner_id, ou.display_name AS room_owner_name,
-       (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS room_member_count
+       (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS room_member_count,
+       (SELECT role FROM room_members WHERE room_id = r.id AND user_id = ?) AS my_role
      FROM trips t
      JOIN rooms r ON r.id = t.room_id
      LEFT JOIN users ou ON ou.id = r.owner_id
      WHERE t.room_id IN (${placeholders}) ORDER BY t.created_at DESC`
-  ).all(...rooms));
+  ).all(req.user.id, ...rooms));
 }));
 
 api.post("/trips", wrap((req, res) => {
@@ -601,6 +604,155 @@ api.post("/import/conversation", wrap(async (req, res) => {
   });
   const tripId = tx();
   res.json({ trip_id: tripId });
+}));
+
+// ---------- adding to a trip that already exists, in prose ----------
+// Two steps on purpose. The LLM call only ever *proposes* — it reads the trip, works out what the
+// text adds that isn't there yet, and hands back a list. Applying it is a second, plain request
+// carrying exactly what the user ticked, so nothing lands in a trip without being seen first.
+
+const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
+
+/** Trip fields an import may fill in. It fills blanks — it never corrects what you chose. */
+const TRIP_FILLABLE = ["name", "trip_type", "start_date", "end_date", "home_city", "budget", "currency"];
+
+/**
+ * Whether a trip field still holds nothing the user actually chose. Three of these arrive with a
+ * value the schema (or the New-trip prompt) put there, not the traveller: a trip called "Imported
+ * trip", priced in USD and typed "round" has answered none of those questions. Treating them as
+ * set would mean a Portugal trip could never be offered EUR — the proposal would list it and then
+ * silently drop it, which is worse than not offering it at all.
+ */
+function isUnsetTripField(field: string, value: unknown): boolean {
+  if (value === null || value === undefined || value === "") return true;
+  if (field === "name") return /^(imported trip|new trip)$/i.test(String(value).trim());
+  if (field === "currency") return String(value).toUpperCase() === "USD";
+  if (field === "trip_type") return String(value) === "round";
+  if (field === "budget") return Number(value) === 0;
+  return false;
+}
+
+api.post("/trips/:id/import/preview", wrap(async (req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const text: string = req.body.text || "";
+  if (text.trim().length < 15) {
+    throw Object.assign(new Error("Tell it a bit more than that — a sentence or two at least."), { status: 400 });
+  }
+  const b = getBundle(tripId);
+  const p = mergePrompt(b, text.slice(0, 300_000));
+  const raw = await complete(p.system, p.user, loadLlmConfig(req.user), "import", req.user.id);
+  const out = extractJson<any>(raw);
+
+  // The model is told not to repeat what's already there; this is the check that it didn't.
+  // Anything already present comes back flagged rather than filtered, so the user sees the
+  // whole of what was understood and decides.
+  const legByCity = new Map((b.legs as any[]).map((l) => [norm(l.city), l]));
+  const placeNames = new Set((b.places as any[]).map((p2) => norm(p2.name)));
+  const todoTexts = new Set((db.prepare("SELECT text FROM todos WHERE trip_id = ?").all(tripId) as any[]).map((t) => norm(t.text)));
+  const bookingKeys = new Set((b.bookings as any[]).map((bk) => `${norm(bk.title)}|${bk.date || ""}`));
+
+  const legs = (out.legs || []).map((l: any) => {
+    const match = legByCity.get(norm(l.city));
+    return { ...l, arrive_time: hhmm(l.arrive_time), depart_time: hhmm(l.depart_time), exists: !!match, leg_id: match?.id ?? null };
+  });
+  const places = (out.places || []).map((p2: any) => ({ ...p2, exists: placeNames.has(norm(p2.name)) }));
+  const todos = (out.todos || []).map((t: any) => ({ ...t, exists: todoTexts.has(norm(t.text)) }));
+  const bookings = (out.bookings || []).map((bk: any) => ({ ...bk, exists: bookingKeys.has(`${norm(bk.title)}|${bk.date || ""}`) }));
+
+  // Trip-level values are only ever offered for fields the trip hasn't got yet — filling blanks,
+  // never correcting the user. Enforced again on apply, so a stale preview can't overwrite either.
+  const trip: any = b.trip;
+  const tripFields: Record<string, any> = {};
+  for (const f of TRIP_FILLABLE) {
+    const v = (out.trip || {})[f];
+    if (v === null || v === undefined || v === "") continue;
+    if (isUnsetTripField(f, trip[f])) tripFields[f] = v;
+  }
+
+  res.json({
+    summary: out.summary || "",
+    trip: tripFields,
+    legs, places, todos, bookings,
+    notes: out.notes || "",
+  });
+}));
+
+api.post("/trips/:id/import/apply", wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const body = req.body || {};
+  const trip: any = db.prepare("SELECT * FROM trips WHERE id = ?").get(tripId);
+  if (!trip) throw Object.assign(new Error("Trip not found"), { status: 404 });
+
+  const added = { legs: 0, places: 0, todos: 0, bookings: 0 };
+
+  const tx = db.transaction(() => {
+    const cols: string[] = [];
+    const vals: any[] = [];
+    for (const f of TRIP_FILLABLE) {
+      const v = body.trip?.[f];
+      if (v === null || v === undefined || v === "") continue;
+      // Same rule as the preview, re-checked against the trip as it is right now — a preview
+      // left open while the trip was edited elsewhere must not overwrite the newer value.
+      if (!isUnsetTripField(f, trip[f])) continue;
+      cols.push(f);
+      vals.push(v);
+    }
+    if (cols.length) {
+      db.prepare(`UPDATE trips SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`).run(...vals, tripId);
+    }
+    if (body.notes) {
+      const merged = [trip.notes, String(body.notes)].filter(Boolean).join("\n\n");
+      db.prepare("UPDATE trips SET notes = ? WHERE id = ?").run(merged, tripId);
+    }
+
+    // Legs first: places and bookings below resolve their city against the finished set, so a
+    // place can attach to a city that only exists because this same apply just created it.
+    let seq = (db.prepare("SELECT COALESCE(MAX(seq), -1) AS m FROM legs WHERE trip_id = ?").get(tripId) as { m: number }).m;
+    for (const l of body.legs || []) {
+      db.prepare(
+        `INSERT INTO legs (trip_id, seq, city, country, arrive_date, arrive_time, depart_date, depart_time, lat, lng)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        tripId, ++seq, l.city || "New city", l.country || "", l.arrive_date ?? null, hhmm(l.arrive_time),
+        l.depart_date ?? null, hhmm(l.depart_time), l.lat ?? null, l.lng ?? null
+      );
+      added.legs++;
+    }
+    const legIdByCity = new Map(
+      (db.prepare("SELECT id, city FROM legs WHERE trip_id = ?").all(tripId) as any[]).map((l) => [norm(l.city), l.id])
+    );
+
+    for (const p of body.places || []) {
+      db.prepare(
+        `INSERT INTO places (trip_id, leg_id, name, category, lat, lng, duration_min, priority, notes, source)
+         VALUES (?,?,?,?,?,?,?,?,?,'ai')`
+      ).run(
+        tripId, p.leg_id ?? p.existing_leg_id ?? legIdByCity.get(norm(p.city)) ?? null, p.name || "Unnamed",
+        p.category || "sight", p.lat ?? null, p.lng ?? null, p.duration_min ?? 90, p.priority || "want", p.notes ?? ""
+      );
+      added.places++;
+    }
+    for (const t of body.todos || []) {
+      db.prepare(`INSERT INTO todos (trip_id, text, category, due_date, source) VALUES (?,?,?,?,'ai')`)
+        .run(tripId, t.text || "?", t.category || "general", t.due_date ?? null);
+      added.todos++;
+    }
+    for (const bk of body.bookings || []) {
+      db.prepare(
+        `INSERT INTO bookings (trip_id, leg_id, kind, title, ref, date, end_date, cost, currency, notes, source)
+         VALUES (?,?,?,?,?,?,?,?,?,?,'ai')`
+      ).run(
+        tripId, legIdByCity.get(norm(bk.city)) ?? null, bk.kind || "other", bk.title || "?", bk.ref ?? "",
+        bk.date ?? null, bk.end_date ?? null, bk.cost ?? null, bk.currency || trip.currency || "USD", bk.notes ?? ""
+      );
+      added.bookings++;
+    }
+  });
+  tx();
+  bumpPlanVersion(tripId);
+  res.json({ added });
 }));
 
 // ---------- Google Places (English search + photos) ----------

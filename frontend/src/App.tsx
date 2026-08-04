@@ -428,7 +428,10 @@ export default function App() {
         )}
 
         {tab === "Import" ? (
-          <ImportTab onImported={async (tripId) => { await loadTrips(); setSelectedId(tripId); setTab("Overview"); }} />
+          <ImportTab
+            trips={trips} selectedId={selectedId} llmReady={llmReady} refresh={refresh}
+            onImported={async (tripId) => { await loadTrips(); setSelectedId(tripId); setTab("Overview"); }}
+          />
         ) : tab === "Rooms" ? (
           <RoomsTab currentUser={currentUser!} />
         ) : tab === "Profile" ? (
