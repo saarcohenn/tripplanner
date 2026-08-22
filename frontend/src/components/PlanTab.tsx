@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock, BedDouble, Car, CarTaxiFront, ChevronLeft, ChevronRight, CircleDot, Clock,
   Flame, Footprints, GripVertical, Hotel, Info, Luggage, Map as MapIcon, MapPin, Pencil,
-  Plane, Plus, Route, Shuffle, Sparkles, Sunrise, TrainFront, Trash2, TriangleAlert,
-  UtensilsCrossed, Wallet, Wand2,
+  PanelRightClose, Plane, Plus, Route, Shuffle, Sparkles, Sunrise, TrainFront, Trash2,
+  TriangleAlert, UtensilsCrossed, Wallet, Wand2,
 } from "lucide-react";
 import { api } from "../api";
 import {
@@ -74,6 +74,11 @@ export default function PlanTab({
 
   const placeById = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
   const advisor: AdvisorDoc | null = plan?.advisor_json ? safeParse<AdvisorDoc>(plan.advisor_json) : null;
+  /** How much the advisor is actually saying — shown on the tab so the rail reads as live. */
+  const adviceCount =
+    (advisor?.pacing_alerts?.length || 0) + (advisor?.drop_suggestions?.length || 0);
+  /** The advice was written against the plan as it stood at generated_at; edits came after. */
+  const adviceStale = !!plan?.edited_at && !!plan?.generated_at && plan.edited_at > plan.generated_at;
 
   // ---------- the editable document ----------
   // The server's copy is the source of truth; this adopts it whenever the string actually changes,
@@ -148,6 +153,10 @@ export default function PlanTab({
   const [showMap, setShowMap] = useState(true);
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [rail, setRail] = useState<"advisor" | "place">("advisor");
+  // Remembered, because whether you want the rail open is a working preference, not a per-visit
+  // decision — it was reappearing at full width on every load.
+  const [railOpen, setRailOpen] = useState(() => localStorage.getItem("planRail") !== "closed");
+  useEffect(() => { localStorage.setItem("planRail", railOpen ? "open" : "closed"); }, [railOpen]);
   const [selected, setSelected] = useState<number | null>(null); // index into the active day's items
 
   // A day switch invalidates an index into the old day's list.
@@ -480,17 +489,19 @@ export default function PlanTab({
   const stamp = plan?.mode === "manual" && plan?.edited_at ? `edited ${plan.edited_at} UTC` : `generated ${plan?.generated_at} UTC`;
 
   return (
-    <div className="plan-layout">
+    <div className={`plan-layout${railOpen ? "" : " rail-collapsed"}`}>
       {surveyOpen && (
         <TransportSurvey legs={legs} bookings={bookings} onSet={setLegTransport} onClose={() => setSurveyOpen(false)} />
       )}
       {narrow && selectedPlace && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
           <div className="modal insight-sheet" onClick={(e) => e.stopPropagation()}>
-            <PlaceInsightPanel
-              place={selectedPlace} city={activeLeg?.city || ""} llmReady={llmReady}
-              onClose={() => setSelected(null)}
-            />
+            <div className="modal-scroll">
+              <PlaceInsightPanel
+                place={selectedPlace} city={activeLeg?.city || ""} llmReady={llmReady}
+                onClose={() => setSelected(null)}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -796,14 +807,35 @@ export default function PlanTab({
         )}
       </div>
 
-      <aside className="advisor">
+      <aside className={`advisor${railOpen ? "" : " collapsed"}`}>
+        {/* Collapsed, the rail is a strip of buttons that reopen it — it stops holding 350px of a
+            laptop screen open for advice you've already read, without hiding that it's there. */}
+        {!railOpen ? (
+          <div className="rail-stub">
+            <button className="rail-stub-btn" title="Show the advisor" aria-label="Show the advisor"
+              onClick={() => { setRail("advisor"); setRailOpen(true); }}>
+              <Sparkles size={16} className="ai-mark" />
+              {adviceCount > 0 && <span className="rail-count">{adviceCount}</span>}
+            </button>
+            <button className="rail-stub-btn" title="Show the selected place" aria-label="Show the selected place"
+              disabled={!selectedPlace}
+              onClick={() => { setRail("place"); setRailOpen(true); }}>
+              <Info size={16} />
+            </button>
+            <span className="rail-stub-label">Advisor</span>
+          </div>
+        ) : (
+        <>
         <div className="rail-tabs">
           <button className={rail === "advisor" ? "active" : ""} onClick={() => setRail("advisor")}>
             <Sparkles size={13} className="ai-mark" /> Advisor
+            {adviceCount > 0 && <span className="rail-count">{adviceCount}</span>}
           </button>
           <button className={rail === "place" ? "active" : ""} onClick={() => setRail("place")} disabled={!selectedPlace}>
             <Info size={13} /> Place
           </button>
+          <button className="rail-close" title="Collapse this panel" aria-label="Collapse this panel"
+            onClick={() => setRailOpen(false)}><PanelRightClose size={15} /></button>
         </div>
 
         {rail === "place" ? (
@@ -822,6 +854,18 @@ export default function PlanTab({
               The advisor never suggests new places — it only tells you what to drop, when to rest, and
               when you'll have to get up early. It reads whatever is saved, hand-built plans included.
             </p>
+            {/* It reads the plan as it was when it last ran, so once you've edited the day it is
+                describing something that no longer exists. Saying so is the difference between a
+                panel that looks broken and one that's honestly out of date. */}
+            {advisor && adviceStale && (
+              <div className="alert small icon-line">
+                <TriangleAlert size={12} />
+                <span className="grow">You've edited the plan since this was written.</span>
+                <button className="inline" onClick={reAdvise} disabled={!llmReady || advising}>
+                  {advising ? "Re-reading…" : "Re-analyze"}
+                </button>
+              </div>
+            )}
             {!advisor && <p className="hint">No analysis yet.</p>}
             {advisor && (
               <>
@@ -864,6 +908,8 @@ export default function PlanTab({
               </>
             )}
           </>
+        )}
+        </>
         )}
       </aside>
     </div>

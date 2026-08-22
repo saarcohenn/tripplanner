@@ -1022,7 +1022,10 @@ a { color: var(--accent-dark); }
 }
 
 /* ---------- plan ---------- */
-.plan-layout { display: flex; flex: 1; min-height: 0; }
+/* The rail's width is a variable so the day column's centring maths follows it when it collapses,
+   rather than the column staying centred around a panel that is no longer there. */
+.plan-layout { display: flex; flex: 1; min-height: 0; --rail-w: 350px; }
+.plan-layout.rail-collapsed { --rail-w: 52px; }
 /* Same content column as the tabs, expressed as padding so the scrollbar stays on the
    pane's own edge next to the advisor rather than being pulled in beside the day cards. */
 .plan-days {
@@ -1032,12 +1035,43 @@ a { color: var(--accent-dark); }
      included — so the advisor's width comes out of the sum before the column is centred.
      (cqw doesn't help: an element can't be its own query container, so it would resolve
      against the viewport.) Only reached side-by-side; stacked, the rule below wins. */
-  padding: 14px max(22px, (100% - 350px - 820px) / 2) 28px;
+  padding: 14px max(22px, (100% - var(--rail-w) - 820px) / 2) 28px;
 }
 .advisor {
-  width: 350px; min-width: 350px; overflow-y: auto;
+  width: var(--rail-w); min-width: var(--rail-w); overflow-y: auto;
   border-left: 1px solid var(--border); background: var(--card-tint); padding: 16px;
+  transition: width 0.24s var(--ease-out), min-width 0.24s var(--ease-out), padding 0.24s var(--ease-out);
 }
+.advisor.collapsed { padding: 12px 6px; overflow: hidden; }
+/* Collapsed: a strip of ways back in, with the label turned on its side so the panel still
+   announces itself instead of becoming two anonymous icons. */
+.rail-stub { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.rail-stub-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 9px;
+  background: var(--card); border: 1px solid var(--border-strong); color: var(--muted);
+}
+.rail-stub-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-dark); box-shadow: none; transform: none; }
+.rail-stub-label {
+  margin-top: 6px; writing-mode: vertical-rl; font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); user-select: none;
+}
+.rail-close {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; padding: 0; border-radius: 999px;
+  background: none; border: 1px solid transparent; box-shadow: none; color: var(--muted);
+}
+.rail-close:hover:not(:disabled) { background: var(--card); border-color: var(--border-strong); color: var(--text); box-shadow: none; transform: none; }
+/* A live count is the difference between a panel that looks switched off and one that is quiet
+   because there is nothing to say. */
+.rail-count {
+  margin-left: 5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; background: var(--warn); color: var(--on-accent);
+}
+.rail-tabs button.active .rail-count { background: var(--on-accent); color: var(--accent); }
+.rail-stub-btn .rail-count { position: absolute; top: -5px; right: -5px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { .advisor { transition: none; } }
 /* The advisor sits beside the days only where both fit: it holds 350px whatever happens,
    so below ~1110px it was squeezing the day cards until they overflowed their pane. A
    tablet gets the stacked layout the phone always had. */
@@ -1049,6 +1083,11 @@ a { color: var(--accent-dark); }
     border-left: none; border-top: 1px solid var(--border);
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
+  /* Stacked, there is no width to reclaim — collapsing just folds it to its header row, and the
+     stub lies along that row instead of standing on its side. */
+  .advisor.collapsed { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .advisor.collapsed .rail-stub { flex-direction: row; justify-content: flex-start; }
+  .rail-stub-label { margin: 0 0 0 4px; writing-mode: horizontal-tb; align-self: center; }
 }
 .day-card {
   background: var(--card); border: 1px solid var(--border);
@@ -1332,7 +1371,8 @@ a { color: var(--accent-dark); }
 .insight-sheet { max-width: 460px; width: 100%; }
 
 .survey-modal { max-width: 560px; width: 100%; }
-.survey-legs { display: grid; gap: 14px; margin-bottom: 16px; max-height: 55vh; overflow-y: auto; }
+/* The height cap lives on .modal now, so this only has to be the part that scrolls. */
+.survey-legs { display: grid; gap: 14px; margin-bottom: 16px; }
 .survey-leg-head { font-size: 13px; margin-bottom: 6px; }
 .survey-hint {
   margin-left: 8px; font-size: 11px; color: var(--olive);
@@ -1618,18 +1658,55 @@ details summary { cursor: pointer; margin: 8px 0 4px; }
 /* ---------- modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0; background: var(--overlay);
-  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  display: flex; justify-content: center; z-index: 1000;
+  padding: 20px;
+  overflow-y: auto; overscroll-behavior: contain;
   animation: fade 0.18s var(--ease) both;
 }
 .modal {
   background: var(--card); border-radius: 16px;
-  padding: 20px 22px; max-width: 460px; width: calc(100% - 40px);
+  padding: 20px 22px; max-width: 460px; width: 100%;
   box-shadow: var(--shadow-lg);
   animation: pop 0.26s var(--ease-out) both;
+  /* `margin: auto` centres a flex item AND keeps both its edges reachable when it is taller
+     than the overlay. `align-items: center` does not: it overflows equally in both directions
+     and the top half becomes unscrollable, which is why a long insight looked stuck under the
+     top of the screen. The height cap plus the inner scroller below means it rarely gets that
+     far, but the two together are what make an over-tall modal behave. */
+  margin: auto;
+  max-height: calc(100dvh - 40px);
+  display: flex; flex-direction: column; min-height: 0;
 }
+/* Everything after the modal's own heading scrolls inside it rather than growing the box. */
+.modal > .modal-scroll { overflow-y: auto; min-height: 0; margin: 0 -22px; padding: 0 22px; }
 .modal h3 { margin: 0 0 8px; color: var(--coral); text-transform: none; letter-spacing: 0; font-size: 15px; }
 .modal p { margin: 0 0 16px; font-size: 13px; }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* On a phone a centred card floating over a scrolled page reads as an interruption you have to
+   hunt for. A sheet rising from the bottom edge is the shape a phone already uses for this, and
+   it arrives where the thumb is instead of where the page happens to be scrolled to. */
+@media (max-width: 768px) {
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    margin: 0; width: 100%; max-width: none;
+    border-radius: 20px 20px 0 0;
+    max-height: 88dvh;
+    padding: 8px 18px calc(18px + env(safe-area-inset-bottom));
+    animation: sheet-up 0.3s var(--ease-out) both;
+  }
+  .modal > .modal-scroll { margin: 0 -18px; padding: 0 18px; }
+  /* The grab bar says "this came from the bottom and goes back there" before anything is read. */
+  .modal::before {
+    content: ""; flex: 0 0 auto; align-self: center;
+    width: 38px; height: 4px; border-radius: 99px;
+    background: var(--border-strong); margin: 2px 0 12px;
+  }
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .modal { animation: fade 0.15s var(--ease) both; }
+}
 
 /* ---------- mobile menu drawer ---------- */
 .hamburger { display: none; }

@@ -45,7 +45,7 @@ export default function TransportSurvey({ legs, bookings, onSet, onClose }: {
           “{TRANSPORT_FALLBACK.label.toLowerCase()}”.
         </p>
 
-        <div className="survey-legs">
+        <div className="modal-scroll survey-legs">
           {legs.map((l) => {
             const suggested = suggestedFor(l, bookings);
             return (
