@@ -158,6 +158,13 @@ export type PlanItem = {
 };
 
 export type PlanDay = {
+  /**
+   * Stable identity, independent of when the day happens. The date used to be the key, which made
+   * "this day is now Thursday" a rewrite of every reference to it; with an id the date is just a
+   * field and moving a day is a one-line change. Assigned on load for plans written before ids
+   * existed — see ensureDayIds.
+   */
+  id: string;
   date: string;
   city: string;
   wake_time: string;
@@ -191,6 +198,46 @@ export type PlanRow = {
   /** Whether the current document came out of the generator or was built/edited by hand. */
   mode: "llm" | "manual";
   edited_at: string | null;
+};
+
+/** One turn of the per-day chat. Kept server-side so the thread survives a reload. */
+export type ChatMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+/**
+ * A place the chat found for you — from a real Google Places search or a Maps list you gave it,
+ * never from the model's own memory. The model can only point at one of these by ref; the server
+ * fills in the details from what it actually fetched.
+ */
+export type ChatFoundPlace = {
+  ref: string;
+  name: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  google_place_id: string;
+  gmaps_url: string;
+  /** What produced it: the search text, or the name of the list it came from. */
+  via: string;
+};
+
+/** What the chat proposes doing to one day. Nothing is written until it's accepted. */
+export type ChatProposal = {
+  summary: string;
+  wake_time: string;
+  items: (PlanItem & { new_place_ref?: string | null })[];
+  new_places: ChatFoundPlace[];
+};
+
+export type ChatTurn = {
+  reply: string;
+  proposal: ChatProposal | null;
+  searched: string[];
+  messages: ChatMessage[];
 };
 
 /** Background on a single chosen place. Never points anywhere new — see insightPrompt on the server. */

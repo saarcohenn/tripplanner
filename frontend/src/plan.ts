@@ -4,6 +4,51 @@
 
 import type { Booking, Leg, Place, PlanDay, PlanDoc, PlanItem, TransportMode, Trip } from "./types";
 
+// ---------- day identity ----------
+
+let idSeq = 0;
+/** Short, unique within a document. Not persistent-globally-unique — it only has to key one plan. */
+export function newDayId(): string {
+  idSeq += 1;
+  return `d${Date.now().toString(36)}${idSeq.toString(36)}`;
+}
+
+/**
+ * Every plan written before days had ids is keyed by date alone. Stamp ids on load so the rest of
+ * the app can assume they exist; the document is saved with them on the next edit. Returns the
+ * same object when nothing was missing, so this can run on every load without churning state.
+ */
+export function ensureDayIds(doc: PlanDoc): PlanDoc {
+  const seen = new Set<string>();
+  let changed = false;
+  const days = doc.days.map((d) => {
+    // A duplicated id is as bad as a missing one — it would make two days the same day.
+    if (d.id && !seen.has(d.id)) { seen.add(d.id); return d; }
+    changed = true;
+    const id = newDayId();
+    seen.add(id);
+    return { ...d, id };
+  });
+  return changed ? { ...doc, days } : doc;
+}
+
+/**
+ * Moves one day onto a new date. If another day already sits there the two swap, which is what
+ * "these two days should trade places" means and avoids ever producing two days on one date.
+ * Days come back in date order, so the strip re-sorts itself.
+ */
+export function moveDayToDate(doc: PlanDoc, dayId: string, date: string): PlanDoc {
+  const moving = doc.days.find((d) => d.id === dayId);
+  if (!moving || moving.date === date) return doc;
+  const occupant = doc.days.find((d) => d.date === date && d.id !== dayId);
+  const days = doc.days.map((d) => {
+    if (d.id === dayId) return { ...d, date };
+    if (occupant && d.id === occupant.id) return { ...d, date: moving.date };
+    return d;
+  });
+  return { ...doc, days: days.slice().sort((a, b) => a.date.localeCompare(b.date)) };
+}
+
 // ---------- dates (local midnight, never UTC — see the date-fields skill) ----------
 
 export function isoDate(d: Date): string {
@@ -280,6 +325,7 @@ export function scaffoldPlan(
     const leg = legForDate(date, legs);
     const items = fixedItems(date, leg, bookings);
     return {
+      id: newDayId(),
       date,
       city: leg?.city || trip.home_city || "",
       wake_time: wakeFor(items),
@@ -298,7 +344,7 @@ export function scaffoldPlan(
 export function blankDay(date: string, legs: Leg[], bookings: Booking[]): PlanDay {
   const leg = legForDate(date, legs);
   const items = fixedItems(date, leg, bookings);
-  return { date, city: leg?.city || "", wake_time: wakeFor(items), summary: "", items };
+  return { id: newDayId(), date, city: leg?.city || "", wake_time: wakeFor(items), summary: "", items };
 }
 
 /** A place turned into a schedulable item, dropped in at `time`. */

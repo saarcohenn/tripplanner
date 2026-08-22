@@ -212,6 +212,99 @@ Every list may be empty. Propose nothing the trip already has.`,
   };
 }
 
+/**
+ * The per-day chat.
+ *
+ * This is the one place the app will put a place in front of you that you didn't pick — and it is
+ * still not allowed to make one up. The model may only point at a candidate the *server* fetched
+ * this turn: a real Google Places search result, or an entry from a Maps list the traveller gave
+ * it. Candidates are referenced by an opaque ref and the server fills in the details from its own
+ * record, so a hallucinated restaurant has nowhere to enter the system — there is no field for the
+ * model to type a name into.
+ *
+ * Two rounds at most: one to ask for searches, one to answer with them.
+ */
+export function dayChatPrompt(args: {
+  bundle: TripBundle;
+  day: any;
+  dayPlaces: any[];
+  history: { role: string; content: string }[];
+  message: string;
+  candidates: { ref: string; name: string; address: string; via: string }[];
+  canSearch: boolean;
+  searchesUsed: boolean;
+}): { system: string; user: string } {
+  const { bundle, day, dayPlaces, history, message, candidates, canSearch, searchesUsed } = args;
+
+  const itemLines = (day.items || [])
+    .map((it: any, i: number) =>
+      `  [${i}] ${it.time} ${it.kind} "${it.title}"${it.place_id != null ? ` (place#${it.place_id})` : ""} ${it.duration_min || 0}min${it.pinned ? " FIXED" : ""}`
+    )
+    .join("\n");
+
+  const placeLines = dayPlaces
+    .map((p) => `  place#${p.id} "${p.name}" (${p.category}, ~${p.duration_min}min, ${p.priority}${p.leg_id ? "" : ", no city"})${p.notes ? ` — ${p.notes}` : ""}`)
+    .join("\n");
+
+  const candidateLines = candidates
+    .map((c) => `  ${c.ref} "${c.name}" — ${c.address || "no address"} [via ${c.via}]`)
+    .join("\n");
+
+  const searchClause = canSearch && !searchesUsed
+    ? `If answering needs a place that is not in either list above, do NOT name one from memory. Reply with ONLY {"searches": ["...", "..."]} — up to 3 short Google-Maps-style queries including the city, e.g. "vintage record shops Shimokitazawa Tokyo". You will be given the real results and asked again.`
+    : searchesUsed
+      ? `The search results are in CANDIDATES above. Use them or say nothing suitable came back.`
+      : `Searching is unavailable (no Google Maps key is configured), so work only with the lists above and say so if the request needed a search.`;
+
+  return {
+    system: `You edit ONE day of a traveller's itinerary, by conversation. You are precise, brief, and you never pretend.
+
+The hard rule: you may only schedule a place that appears in TRIP PLACES or in CANDIDATES below. You must NEVER write the name of an attraction, restaurant, shop or venue that is not in one of those lists — not from your own knowledge, not as an example, not as a "you could also". If you want somewhere that isn't listed, ask for a search instead. A day you cannot improve honestly is a day you leave alone, and you say why.
+
+Other rules:
+- Items marked FIXED come from a booking or a stated arrival/departure time. Keep them, keep their time.
+- Respect the city and the way the traveller gets around it — travel between stops has to fit.
+- Give times in local 24h HH:MM, in a sensible order, with realistic durations and travel gaps.
+- Keep everything the traveller didn't ask you to change.
+
+Reply with ONLY a JSON object, no prose.`,
+    user: `${bundleText(bundle)}
+
+THE DAY YOU ARE EDITING — ${day.date}, ${day.city || "city unknown"} (wake ${day.wake_time || "?"})
+Summary: ${day.summary || "(none)"}
+Items:
+${itemLines || "  (empty)"}
+
+TRIP PLACES you may schedule (the traveller chose these):
+${placeLines || "  (none)"}
+
+CANDIDATES you may schedule (fetched for you this turn — real results, not your own recall):
+${candidateLines || "  (none)"}
+
+${history.length ? `EARLIER IN THIS CONVERSATION:\n${history.map((h) => `${h.role}: ${h.content}`).join("\n")}\n` : ""}
+THE TRAVELLER SAYS:
+${message}
+
+${searchClause}
+
+Otherwise reply as JSON with this exact shape:
+{
+  "reply": "1-3 sentences: what you changed and why. Say plainly if you couldn't do part of it.",
+  "proposal": {
+    "summary": "one-line summary of the day",
+    "wake_time": "HH:MM",
+    "items": [
+      { "time": "HH:MM", "kind": "visit|meal|transit|rest|checkin|checkout|flight|other",
+        "title": "string", "place_id": 123 or null, "new_place_ref": "c2 or null",
+        "duration_min": 90, "details": "how to get there + what to expect, or empty",
+        "tip": "queue/booking tip or empty", "pinned": true only for items that were FIXED }
+    ]
+  }
+}
+"items" is the WHOLE day after your change, in order — not a diff. Every item that stands for a place must carry either "place_id" (from TRIP PLACES) or "new_place_ref" (from CANDIDATES), never both, never a name alone. Set "proposal" to null when you are only answering a question or have nothing to change.`,
+  };
+}
+
 export function importPrompt(conversationText: string): { system: string; user: string } {
   return {
     system: `You extract structured trip data from a travel-planning conversation (any language, including Hebrew). Extract ONLY what the conversation actually contains — do not invent places or dates. Keep place/city names in English when a well-known English name exists, otherwise keep the original. Estimate lat/lng for well-known cities and famous places when you are confident; otherwise use null.

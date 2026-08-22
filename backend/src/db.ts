@@ -96,6 +96,19 @@ CREATE TABLE IF NOT EXISTS place_insights (
   generated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Per-day chat thread. Keyed by the day's own id rather than its date, so moving a day to another
+-- date carries its conversation with it. Kept server-side so the thread survives a reload and can
+-- be replayed as context on the next turn.
+CREATE TABLE IF NOT EXISTS plan_chat (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day_id TEXT NOT NULL,
+  role TEXT NOT NULL,                             -- user | assistant
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_plan_chat_day ON plan_chat(trip_id, day_id, id);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,

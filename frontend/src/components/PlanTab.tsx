@@ -7,13 +7,16 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import {
-  blankDay, fmtDayLabel, fmtDayShort, fromMin, hopBetween, hopShortfall, isoDate, itemForPlace,
-  legForDate, retimeDay, scaffoldPlan, toMin, TRANSPORT_FALLBACK, transportLabel, tripDates,
-  unscheduledPlaceIds, weekday,
+  blankDay, ensureDayIds, fmtDayLabel, fmtDayShort, fromMin, hopBetween, hopShortfall, isoDate,
+  itemForPlace, legForDate, moveDayToDate, retimeDay, scaffoldPlan, toMin, TRANSPORT_FALLBACK,
+  transportLabel, tripDates, unscheduledPlaceIds, weekday,
 } from "../plan";
 import type {
-  AdvisorDoc, Leg, Place, PlanDay, PlanDoc, PlanItem, PlanJob, PlanRow, TransportMode, TripDetail,
+  AdvisorDoc, ChatProposal, Leg, Place, PlanDay, PlanDoc, PlanItem, PlanJob, PlanRow,
+  TransportMode, TripDetail,
 } from "../types";
+import { DatePicker } from "./DateRangePicker";
+import DayChat from "./DayChat";
 import DayMap, { DayStop } from "./DayMap";
 import PlaceInsightPanel from "./PlaceInsightPanel";
 import TimeField from "./TimeField";
@@ -37,7 +40,8 @@ type DropTarget =
   | { kind: "index"; index: number }
   | { kind: "end" }
   | { kind: "tray" }
-  | { kind: "day"; date: string };
+  /** A day chip. Carries the day's id, so a drop still lands right after dates are shuffled. */
+  | { kind: "day"; dayId: string };
 
 /** Matches the breakpoint where the advisor rail stops sitting beside the days (see styles.css). */
 function useNarrow(): boolean {
@@ -80,7 +84,9 @@ export default function PlanTab({
     const json = plan?.plan_json ?? null;
     if (json === serverJsonRef.current) return;
     serverJsonRef.current = json;
-    setDoc(json ? safeParse<PlanDoc>(json) : null);
+    const parsed = json ? safeParse<PlanDoc>(json) : null;
+    // Plans written before days had ids get them here; they're persisted on the next save.
+    setDoc(parsed ? ensureDayIds(parsed) : null);
   }, [plan?.plan_json]);
 
   const docRef = useRef<PlanDoc | null>(null);
@@ -115,23 +121,28 @@ export default function PlanTab({
   useEffect(() => () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); }, []);
 
   // ---------- which day is on screen ----------
-  const dates = useMemo(() => (doc?.days || []).map((d) => d.date), [doc]);
-  const [activeDate, setActiveDate] = useState<string | null>(null);
+  // Tracked by the day's id, not its date: moving a day to another date must not lose your place,
+  // and two days swapping dates must not silently swap which one you were looking at.
+  const days = useMemo(() => doc?.days || [], [doc]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   useEffect(() => {
-    if (dates.length === 0) return void setActiveDate(null);
-    setActiveDate((cur) => {
-      if (cur && dates.includes(cur)) return cur;
+    if (days.length === 0) return void setActiveId(null);
+    setActiveId((cur) => {
+      if (cur && days.some((d) => d.id === cur)) return cur;
       const today = isoDate(new Date());
-      return dates.find((d) => d >= today) ?? dates[0];
+      return (days.find((d) => d.date >= today) ?? days[0]).id;
     });
-  }, [dates]);
-  const activeDateRef = useRef<string | null>(null);
-  useEffect(() => { activeDateRef.current = activeDate; }, [activeDate]);
+  }, [days]);
+  const activeIdRef = useRef<string | null>(null);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
-  const dayIndex = doc?.days.findIndex((d) => d.date === activeDate) ?? -1;
-  const day: PlanDay | null = dayIndex >= 0 ? doc!.days[dayIndex] : null;
+  const dayIndex = days.findIndex((d) => d.id === activeId);
+  const day: PlanDay | null = dayIndex >= 0 ? days[dayIndex] : null;
+  const activeDate = day?.date ?? null;
   const activeLeg: Leg | null = activeDate ? legForDate(activeDate, legs) : null;
   const mode: TransportMode = activeLeg?.transport || "";
+  /** Jump the strip to whichever day now sits on this date — used by the advisor's date links. */
+  const goToDate = (d: string) => setActiveId(days.find((x) => x.date === d)?.id ?? activeId);
 
   const [editing, setEditing] = useState(false);
   const [showMap, setShowMap] = useState(true);
@@ -165,7 +176,7 @@ export default function PlanTab({
     updateEdges();
     const t = window.setTimeout(updateEdges, 400);
     return () => window.clearTimeout(t);
-  }, [activeDate, dates, updateEdges]);
+  }, [activeId, days, updateEdges]);
   useEffect(() => {
     window.addEventListener("resize", updateEdges);
     return () => window.removeEventListener("resize", updateEdges);
@@ -249,7 +260,7 @@ export default function PlanTab({
       case "index": return { kind: "index", index: Number(el.dataset.index) };
       case "end": return { kind: "end" };
       case "tray": return { kind: "tray" };
-      case "day": return el.dataset.date ? { kind: "day", date: el.dataset.date } : null;
+      case "day": return el.dataset.day ? { kind: "day", dayId: el.dataset.day } : null;
       default: return null;
     }
   }
@@ -266,7 +277,7 @@ export default function PlanTab({
       setOver(
         target == null ? null
           : target.kind === "index" ? `index-${target.index}`
-          : target.kind === "day" ? `day-${target.date}`
+          : target.kind === "day" ? `day-${target.dayId}`
           : target.kind
       );
     };
@@ -285,10 +296,10 @@ export default function PlanTab({
 
   function applyDrop(payload: DragPayload, target: DropTarget) {
     const cur = docRef.current;
-    const date = activeDateRef.current;
-    if (!cur || !date) return;
+    const dayId = activeIdRef.current;
+    if (!cur || !dayId) return;
     const days = cur.days.map((d) => ({ ...d, items: [...(d.items || [])] }));
-    const di = days.findIndex((d) => d.date === date);
+    const di = days.findIndex((d) => d.id === dayId);
     if (di < 0) return;
     const source = days[di];
 
@@ -312,8 +323,8 @@ export default function PlanTab({
       return;
     }
 
-    if (target.kind === "day" && target.date !== date) {
-      const tj = days.findIndex((d) => d.date === target.date);
+    if (target.kind === "day" && target.dayId !== dayId) {
+      const tj = days.findIndex((d) => d.id === target.dayId);
       if (tj < 0) return;
       const dest = days[tj];
       dest.items.push({ ...moving, time: timeAt(dest.items, dest.items.length, dest.wake_time) });
@@ -334,12 +345,76 @@ export default function PlanTab({
 
   // ---------- derived views ----------
   const unscheduled = useMemo(() => unscheduledPlaceIds(doc, places), [doc, places]);
+
+  // The tray used to show only this city's unscheduled places, which hid most of the trip exactly
+  // when you wanted to reach for it. It now offers everything, with the narrowing as filters you
+  // can drop — including the ones already on a day, since a place can be worth a second visit.
+  const [trayCityOnly, setTrayCityOnly] = useState(true);
+  const [trayUnusedOnly, setTrayUnusedOnly] = useState(true);
+  const [trayQuery, setTrayQuery] = useState("");
+
   const trayPlaces = useMemo(() => {
-    const ids = new Set(unscheduled);
-    return places.filter(
-      (p) => ids.has(p.id) && (activeLeg == null || p.leg_id === activeLeg.id || p.leg_id == null)
+    const unusedIds = new Set(unscheduled);
+    const q = trayQuery.trim().toLowerCase();
+    return places.filter((p) => {
+      if (p.status !== "active") return false;
+      if (trayUnusedOnly && !unusedIds.has(p.id)) return false;
+      // "No city yet" places stay visible under the city filter — they're the ones most in need
+      // of being dragged somewhere, and hiding them is how they get forgotten.
+      if (trayCityOnly && activeLeg && p.leg_id !== activeLeg.id && p.leg_id != null) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !(p.notes || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [places, unscheduled, trayUnusedOnly, trayCityOnly, activeLeg, trayQuery]);
+
+  const legCity = useMemo(() => new Map(legs.map((l) => [l.id, l.city])), [legs]);
+  const scheduledIds = useMemo(
+    () => new Set(places.map((p) => p.id).filter((id) => !unscheduled.includes(id))),
+    [places, unscheduled]
+  );
+
+  // ---------- moving a day to another date ----------
+  function moveDay(date: string | null) {
+    const cur = docRef.current;
+    if (!cur || !day || !date || date === day.date) return;
+    commit(moveDayToDate(cur, day.id, date));
+  }
+  const dateTakenBy = (date: string) => days.find((d) => d.date === date && d.id !== day?.id);
+
+  // ---------- applying what the chat proposed ----------
+  // Places the chat found are created here, not on the server, so they go through the same
+  // endpoint as any place you add by hand and land in the trip list like everything else.
+  async function applyChatProposal(proposal: ChatProposal) {
+    const cur = docRef.current;
+    if (!cur || !day) return;
+    const refToId = new Map<string, number>();
+    for (const np of proposal.new_places) {
+      const created = await api.post<Place>(`/trips/${trip.id}/places`, {
+        name: np.name,
+        category: "other",
+        lat: np.lat, lng: np.lng,
+        google_place_id: np.google_place_id || "",
+        gmaps_url: np.gmaps_url || "",
+        notes: np.address || "",
+        leg_id: activeLeg?.id ?? null,
+        duration_min: 60,
+      });
+      refToId.set(np.ref, created.id);
+    }
+    const items: PlanItem[] = proposal.items.map((it) => {
+      const { new_place_ref, ...rest } = it;
+      return {
+        ...rest,
+        place_id: new_place_ref ? refToId.get(new_place_ref) ?? null : it.place_id ?? null,
+      };
+    });
+    const nextDays = cur.days.map((d) =>
+      d.id === day.id ? { ...d, summary: proposal.summary, wake_time: proposal.wake_time, items } : d
     );
-  }, [unscheduled, places, activeLeg]);
+    commit({ ...cur, days: nextDays });
+    setSelected(null);
+    if (proposal.new_places.length) await refresh();
+  }
 
   const stops: DayStop[] = useMemo(() => {
     const out: DayStop[] = [];
@@ -400,7 +475,8 @@ export default function PlanTab({
     );
   }
 
-  const missingDays = tripDates(trip, legs).filter((d) => !dates.includes(d)).length;
+  const planned = new Set(days.map((d) => d.date));
+  const missingDays = tripDates(trip, legs).filter((d) => !planned.has(d)).length;
   const stamp = plan?.mode === "manual" && plan?.edited_at ? `edited ${plan.edited_at} UTC` : `generated ${plan?.generated_at} UTC`;
 
   return (
@@ -450,7 +526,7 @@ export default function PlanTab({
             moves to another day while only one day is on screen. */}
         <div className="day-nav">
           <button className="day-nav-arrow" aria-label="Previous day" disabled={dayIndex <= 0}
-            onClick={() => setActiveDate(dates[dayIndex - 1])}><ChevronLeft size={18} /></button>
+            onClick={() => setActiveId(days[dayIndex - 1].id)}><ChevronLeft size={18} /></button>
           <div className="day-strip-wrap">
             <span className={`strip-fade left${edges.left ? " show" : ""}`} aria-hidden="true" />
             <div className="day-strip" ref={stripRef} onScroll={updateEdges}>
@@ -458,9 +534,9 @@ export default function PlanTab({
                 <button
                   key={d.date}
                   data-drop={editing ? "day" : undefined}
-                  data-date={d.date}
-                  className={`day-chip${d.date === activeDate ? " active" : ""}${over === `day-${d.date}` ? " drag-over" : ""}`}
-                  onClick={() => setActiveDate(d.date)}
+                  data-day={d.id}
+                  className={`day-chip${d.id === activeId ? " active" : ""}${over === `day-${d.id}` ? " drag-over" : ""}`}
+                  onClick={() => setActiveId(d.id)}
                 >
                   <span className="day-chip-dow">{weekday(d.date)}</span>
                   <span className="day-chip-date">{fmtDayShort(d.date)}</span>
@@ -471,8 +547,8 @@ export default function PlanTab({
             </div>
             <span className={`strip-fade right${edges.right ? " show" : ""}`} aria-hidden="true" />
           </div>
-          <button className="day-nav-arrow" aria-label="Next day" disabled={dayIndex < 0 || dayIndex >= dates.length - 1}
-            onClick={() => setActiveDate(dates[dayIndex + 1])}><ChevronRight size={18} /></button>
+          <button className="day-nav-arrow" aria-label="Next day" disabled={dayIndex < 0 || dayIndex >= days.length - 1}
+            onClick={() => setActiveId(days[dayIndex + 1].id)}><ChevronRight size={18} /></button>
         </div>
 
         {missingDays > 0 && (
@@ -505,15 +581,29 @@ export default function PlanTab({
             )}
 
             {editing ? (
-              <div className="day-edit-row">
-                <label className="block">Summary
-                  <input dir="auto" value={day.summary || ""} placeholder="What today is about"
-                    onChange={(e) => patchDay({ summary: e.target.value })} />
-                </label>
-                <button className="small btn-icon" onClick={retime} title="Recalculate every time from the order, holding fixed items in place">
-                  <Wand2 size={13} /> Re-time day
-                </button>
-              </div>
+              <>
+                <div className="day-edit-row">
+                  <label className="block">Summary
+                    <input dir="auto" value={day.summary || ""} placeholder="What today is about"
+                      onChange={(e) => patchDay({ summary: e.target.value })} />
+                  </label>
+                  <button className="small btn-icon" onClick={retime} title="Recalculate every time from the order, holding fixed items in place">
+                    <Wand2 size={13} /> Re-time day
+                  </button>
+                </div>
+                {/* The day is an object with a date, not a date with contents — so this moves the
+                    whole day, and trades places with whatever already sits on the target date
+                    rather than stacking two days onto one. */}
+                <div className="day-edit-row">
+                  <label className="block drp-label">This day happens on
+                    <DatePicker value={day.date} onChange={moveDay} label="Pick a date" />
+                  </label>
+                  <span className="hint day-move-hint">
+                    The day moves whole — items, notes and its chat come with it. Landing on a date
+                    another day already holds swaps the two.
+                  </span>
+                </div>
+              </>
             ) : (
               day.summary && <div className="hint" dir="auto">{day.summary}</div>
             )}
@@ -638,16 +728,32 @@ export default function PlanTab({
           </div>
         )}
 
-        {/* The pool of chosen-but-unscheduled places. Only what belongs to this city (plus the
-            ones with no city yet) — offering Tokyo's list on a Kyoto day is just noise. */}
+        {/* Every place on the trip, ready to drag onto the day. The filters narrow it; none of
+            them hide anything you can't get back with one click. */}
         {editing && (
           <div
             data-drop="tray"
             className={`plan-tray${over === "tray" ? " drag-over" : ""}`}
           >
             <div className="row spread">
-              <h3>Your places{activeLeg ? ` in ${activeLeg.city}` : ""} <span className="hint">{trayPlaces.length}</span></h3>
-              <span className="hint">Drag onto the day — or drag a scheduled item back here to unschedule it.</span>
+              <h3>Your places <span className="hint">{trayPlaces.length} of {places.length}</span></h3>
+              <span className="hint">Drag onto the day — or drag a scheduled item back here to take it off.</span>
+            </div>
+            <div className="tray-filters">
+              <input
+                dir="auto" className="tray-search" placeholder="Search your places…"
+                value={trayQuery} onChange={(e) => setTrayQuery(e.target.value)}
+              />
+              <button
+                className={`chip-toggle${trayCityOnly ? " active" : ""}`} aria-pressed={trayCityOnly}
+                onClick={() => setTrayCityOnly((v) => !v)}
+                title="Show only places in this day's city (places with no city always show)"
+              >{activeLeg ? activeLeg.city : "This city"}</button>
+              <button
+                className={`chip-toggle${trayUnusedOnly ? " active" : ""}`} aria-pressed={trayUnusedOnly}
+                onClick={() => setTrayUnusedOnly((v) => !v)}
+                title="Hide places already scheduled somewhere in the plan"
+              >Not scheduled yet</button>
             </div>
             <div className="tray-list">
               {trayPlaces.map((p) => (
@@ -657,16 +763,30 @@ export default function PlanTab({
                   onPointerDown={(e) => startDrag(e, { kind: "place", placeId: p.id })}
                 >
                   <span className="tray-dot" style={{ background: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other }} />
-                  <span className="grow" dir="auto">{p.name}</span>
-                  <span className="hint nowrap">{p.duration_min}m · {p.priority}</span>
+                  <span className="grow tray-name" dir="auto">
+                    {p.name}
+                    <span className="tray-meta">
+                      {legCity.get(p.leg_id ?? -1) || "no city"} · {p.duration_min}m · {p.priority}
+                    </span>
+                  </span>
+                  {scheduledIds.has(p.id) && <span className="tray-badge" title="Already on a day">on a day</span>}
                   <GripVertical size={13} className="tray-grip" />
                 </div>
               ))}
               {trayPlaces.length === 0 && (
-                <p className="hint">Everything you picked for this city is on a day already.</p>
+                <p className="hint">
+                  {places.length === 0
+                    ? "No places on this trip yet — add them on the Places tab."
+                    : "Nothing matches those filters. Turn one off above to see more."}
+                </p>
               )}
             </div>
           </div>
+        )}
+
+        {/* Per-day, because "replan the day" only means anything against a specific day. */}
+        {editing && day && (
+          <DayChat tripId={trip.id} day={day} llmReady={llmReady} onApply={applyChatProposal} />
         )}
 
         {unscheduled.length > 0 && !editing && (
@@ -711,7 +831,7 @@ export default function PlanTab({
                     <h3>Pacing</h3>
                     {advisor.pacing_alerts.map((a, i) => (
                       <div key={i} className={`alert type-${a.type}`}>
-                        <button className="alert-date" onClick={() => setActiveDate(a.date)}>{a.date}</button>{" "}
+                        <button className="alert-date" onClick={() => goToDate(a.date)}>{a.date}</button>{" "}
                         <AdvisorIcon type={a.type} /> <span dir="auto">{a.message}</span>
                       </div>
                     ))}
@@ -735,7 +855,7 @@ export default function PlanTab({
                     <h3>Day notes</h3>
                     {advisor.day_notes.map((n, i) => (
                       <p key={i} className="hint">
-                        <button className="alert-date" onClick={() => setActiveDate(n.date)}>{n.date}</button>{" "}
+                        <button className="alert-date" onClick={() => goToDate(n.date)}>{n.date}</button>{" "}
                         <span dir="auto">{n.note}</span>
                       </p>
                     ))}

@@ -1225,8 +1225,64 @@ a { color: var(--accent-dark); }
 }
 .tray-card:active { cursor: grabbing; }
 .tray-card.dragging { opacity: 0.4; }
-.tray-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
-.tray-grip { color: var(--muted); flex: 0 0 auto; }
+.tray-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; margin-top: 4px; align-self: flex-start; }
+.tray-grip { color: var(--muted); flex: 0 0 auto; align-self: center; }
+.tray-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.tray-search { flex: 1 1 180px; min-width: 0; font-size: 12px; padding: 6px 10px; }
+.tray-card { align-items: flex-start; }
+.tray-name { display: grid; gap: 1px; min-width: 0; }
+.tray-meta { font-size: 11px; color: var(--muted); }
+.tray-badge {
+  flex: 0 0 auto; align-self: center; font-size: 10px; color: var(--muted);
+  background: var(--card-tint); border-radius: 999px; padding: 2px 7px; white-space: nowrap;
+}
+.day-move-hint { flex: 1 1 220px; }
+
+/* ---------- per-day chat ---------- */
+.day-chat {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 12px 14px; margin: 14px 0 8px;
+  display: grid; gap: 10px;
+}
+.day-chat h3 { margin: 0; }
+.chat-log {
+  display: grid; gap: 8px; max-height: 320px; overflow-y: auto;
+  padding-right: 2px; scrollbar-width: thin;
+}
+.chat-empty ul { margin: 4px 0 6px; padding-left: 18px; display: grid; gap: 3px; }
+.chat-empty p { margin: 0; }
+.chat-msg {
+  font-size: 13px; line-height: 1.5; padding: 8px 11px; border-radius: 12px;
+  max-width: 88%; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.chat-msg.user { background: var(--accent-tint); color: var(--accent-dark); justify-self: end; border-bottom-right-radius: 4px; }
+.chat-msg.assistant { background: var(--card-tint); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.chat-msg.pending { color: var(--muted); }
+
+/* The proposal is a preview, not the plan — it reads as a card sitting on top of the day, and
+   the day underneath is untouched until it's accepted. */
+.chat-proposal {
+  border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px;
+  background: var(--card-tint); display: grid; gap: 8px;
+}
+.chat-new-places { display: grid; gap: 4px; }
+.chat-new-place {
+  display: flex; align-items: flex-start; gap: 6px; font-size: 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 6px 9px;
+}
+.chat-via { flex: 0 0 auto; font-size: 10px; color: var(--muted); font-style: italic; }
+.chat-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.chat-items li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.chat-items .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 42px; font-weight: 600; font-size: 12px; }
+.chat-badge {
+  margin-left: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--on-accent); background: var(--accent);
+  border-radius: 999px; padding: 1px 6px;
+}
+.chat-badge.fixed { background: var(--card-tint); color: var(--muted); border: 1px solid var(--border-strong); }
+.chat-input { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input textarea { flex: 1; min-width: 0; resize: vertical; }
+.chat-input .icon-btn { width: 38px; height: 38px; }
 
 /* The day's own route. Height is set here (not by the map library) so it can shrink on a
    phone without the tiles guessing. */

@@ -4,10 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
-import { planPrompt, advisorPrompt, importPrompt, insightPrompt, mergePrompt, DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle } from "./prompts.js";
+import {
+  planPrompt, advisorPrompt, dayChatPrompt, importPrompt, insightPrompt, mergePrompt,
+  DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle,
+} from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
 import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
 import { fetchSharedList } from "./gmapsList.js";
+import { sanitizeProposal, searchQueries, type Candidate } from "./dayChat.js";
 
 export const api = Router();
 api.use(requireUser);
@@ -466,6 +470,141 @@ api.put("/trips/:id/plan", wrap((req, res) => {
   }
   db.prepare("UPDATE trips SET stage = 'planned' WHERE id = ?").run(tripId);
   res.json(db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId));
+}));
+
+// ---------- per-day chat ----------
+// The only part of the app that puts a place in front of you that you didn't pick — and it still
+// cannot invent one. Everything schedulable is either already in the trip or was fetched here this
+// turn (a real Places search, or a Maps list the traveller pasted). The model refers to candidates
+// by an opaque ref and the server materialises them from its own record, so there is no field for
+// a made-up restaurant to arrive in.
+
+const MAPS_LIST_RE = /https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps)\S*/gi;
+const MAX_CANDIDATES = 60;
+
+api.get("/trips/:id/plan/chat", wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripAccess(req.user.id, tripId);
+  const dayId = String(req.query.day_id || "");
+  if (!dayId) throw Object.assign(new Error("day_id is required"), { status: 400 });
+  res.json({
+    messages: db.prepare(
+      "SELECT id, role, content, created_at FROM plan_chat WHERE trip_id = ? AND day_id = ? ORDER BY id"
+    ).all(tripId, dayId),
+  });
+}));
+
+api.delete("/trips/:id/plan/chat", wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const dayId = String(req.query.day_id || "");
+  if (!dayId) throw Object.assign(new Error("day_id is required"), { status: 400 });
+  db.prepare("DELETE FROM plan_chat WHERE trip_id = ? AND day_id = ?").run(tripId, dayId);
+  res.json({ ok: true });
+}));
+
+api.post("/trips/:id/plan/chat", wrap(async (req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const dayId = String(req.body.day_id || "");
+  const message = String(req.body.message || "").trim();
+  if (!dayId) throw Object.assign(new Error("day_id is required"), { status: 400 });
+  if (!message) throw Object.assign(new Error("Say something first"), { status: 400 });
+
+  const planRow: any = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
+  if (!planRow) throw Object.assign(new Error("This trip has no plan yet"), { status: 400 });
+  let doc: any;
+  try { doc = JSON.parse(planRow.plan_json); } catch { doc = null; }
+  const day = (doc?.days || []).find((d: any) => d.id === dayId);
+  if (!day) throw Object.assign(new Error("That day is no longer in the plan"), { status: 404 });
+
+  const bundle = getBundle(tripId);
+  const dayPlaces = (bundle.places as any[]).filter((p) => p.status === "active");
+  const cfg = loadLlmConfig(req.user);
+
+  const candidates: Candidate[] = [];
+  const addCandidates = (rows: Omit<Candidate, "ref">[], prefix: string) => {
+    for (const r of rows) {
+      if (candidates.length >= MAX_CANDIDATES) return;
+      candidates.push({ ...r, ref: `${prefix}${candidates.length + 1}` });
+    }
+  };
+
+  // A Maps list pasted into the message is fetched before the model sees anything, so "replan the
+  // day from this list" works on the actual list rather than on the model's idea of it.
+  const listUrls = message.match(MAPS_LIST_RE) || [];
+  for (const url of listUrls.slice(0, 2)) {
+    try {
+      const { listName, items } = await fetchSharedList(url);
+      addCandidates(
+        items.map((it) => ({
+          name: it.name, address: it.address, lat: it.lat, lng: it.lng,
+          google_place_id: "", gmaps_url: it.gmaps_url, via: listName ? `list "${listName}"` : "your list",
+        })),
+        "l"
+      );
+    } catch (e: any) {
+      // A bad link shouldn't kill the turn — the model is told what came back, which is nothing.
+      console.error(`Chat list fetch failed for trip ${tripId}:`, e.message || e);
+    }
+  }
+
+  const history = db.prepare(
+    "SELECT role, content FROM plan_chat WHERE trip_id = ? AND day_id = ? ORDER BY id DESC LIMIT 8"
+  ).all(tripId, dayId).reverse() as { role: string; content: string }[];
+
+  const mapsKey = effectiveGmapsKey();
+  const searched: string[] = [];
+
+  const ask = async (searchesUsed: boolean) => {
+    const p = dayChatPrompt({
+      bundle, day, dayPlaces, history, message,
+      candidates: candidates.map((c) => ({ ref: c.ref, name: c.name, address: c.address, via: c.via })),
+      canSearch: !!mapsKey,
+      searchesUsed,
+    });
+    return extractJson<any>(await complete(p.system, p.user, cfg, "chat", req.user.id));
+  };
+
+  let out = await ask(false);
+
+  // One search round, then it must answer. The model names the query; Google names the places.
+  const wanted = mapsKey ? searchQueries(out?.searches) : [];
+  if (wanted.length) {
+    for (const query of wanted) {
+      searched.push(query);
+      try {
+        const hits = await gplacesSearch(query, mapsKey!);
+        addCandidates(
+          hits.map((h) => ({
+            name: h.name, address: h.address, lat: h.lat, lng: h.lng,
+            google_place_id: h.place_id, gmaps_url: "", via: `search "${query}"`,
+          })),
+          "c"
+        );
+      } catch (e: any) {
+        console.error(`Chat search failed for trip ${tripId} (${query}):`, e.message || e);
+      }
+    }
+    out = await ask(true);
+  }
+
+  const reply = String(out?.reply || "").trim() || "(no reply)";
+  const proposal = sanitizeProposal(
+    out?.proposal,
+    candidates,
+    new Set((bundle.places as any[]).map((p) => p.id)),
+    day
+  );
+
+  const ins = db.prepare("INSERT INTO plan_chat (trip_id, day_id, role, content) VALUES (?,?,?,?)");
+  ins.run(tripId, dayId, "user", message);
+  ins.run(tripId, dayId, "assistant", reply);
+  const messages = db.prepare(
+    "SELECT id, role, content, created_at FROM plan_chat WHERE trip_id = ? AND day_id = ? ORDER BY id"
+  ).all(tripId, dayId);
+
+  res.json({ reply, proposal, searched, messages });
 }));
 
 // ---------- per-place insights (one small LLM call, cached forever) ----------
