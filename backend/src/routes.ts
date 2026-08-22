@@ -930,15 +930,81 @@ api.post(`/trips/:id/places/import-link`, wrap(async (req, res) => {
   });
 }));
 
+// ---------- tagging places with the city they belong to ----------
+// A place's leg is what decides which day-range it can be scheduled in, so an untagged place is
+// one the planner can't place. Coordinates are the only signal that doesn't need the user: the
+// nearest located city wins. It's straight-line distance and it says so — a suggestion made in
+// one click and corrected on the card, not a guess presented as fact.
+type LegPoint = { id: number; lat: number | null; lng: number | null };
+
+function nearestLegId(legs: LegPoint[], lat: number | null, lng: number | null): number | null {
+  if (lat == null || lng == null) return null;
+  let best: { id: number; d: number } | null = null;
+  for (const l of legs) {
+    if (l.lat == null || l.lng == null) continue;
+    const d = (l.lat - lat) ** 2 + (l.lng - lng) ** 2;
+    if (!best || d < best.d) best = { id: l.id, d };
+  }
+  return best?.id ?? null;
+}
+
+api.post(`/trips/:id/places/assign-legs`, wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const legs = db.prepare("SELECT id, lat, lng FROM legs WHERE trip_id = ?").all(tripId) as LegPoint[];
+
+  // Default target is everything not tagged yet — the case that actually hurts after an import.
+  const ids: number[] = Array.isArray(req.body.place_ids) ? req.body.place_ids.map(Number) : [];
+  const targets = (ids.length
+    ? db.prepare(
+        `SELECT id, lat, lng FROM places WHERE trip_id = ? AND id IN (${ids.map(() => "?").join(",")})`
+      ).all(tripId, ...ids)
+    : db.prepare("SELECT id, lat, lng FROM places WHERE trip_id = ? AND leg_id IS NULL").all(tripId)) as
+    { id: number; lat: number | null; lng: number | null }[];
+
+  const auto = req.body.mode === "auto";
+  const explicit = req.body.leg_id === null || req.body.leg_id === undefined ? null : Number(req.body.leg_id);
+  if (!auto && explicit !== null && !legs.some((l) => l.id === explicit)) {
+    throw Object.assign(new Error("That city isn't part of this trip"), { status: 400 });
+  }
+
+  const update = db.prepare("UPDATE places SET leg_id = ? WHERE id = ?");
+  let assigned = 0;
+  let skipped = 0;
+  db.transaction(() => {
+    for (const p of targets) {
+      const legId = auto ? nearestLegId(legs, p.lat, p.lng) : explicit;
+      // In auto mode a place with no coordinates (or a trip with no located cities) is left
+      // alone rather than dumped into whichever city happens to be first.
+      if (auto && legId == null) { skipped++; continue; }
+      update.run(legId, p.id);
+      assigned++;
+    }
+  })();
+  if (assigned) bumpPlanVersion(tripId);
+  res.json({ assigned, skipped, located_legs: legs.filter((l) => l.lat != null && l.lng != null).length });
+}));
+
 api.post(`/trips/:id/places/import`, wrap((req, res) => {
   const tripId = Number(req.params.id);
   assertTripWrite(req.user.id, tripId);
   const items: ImportCandidate[] = Array.isArray(req.body.items) ? req.body.items : [];
   const category = typeof req.body.category === "string" ? req.body.category : "other";
   if (items.length === 0) throw Object.assign(new Error("No places selected"), { status: 400 });
+
+  // An import used to land everything untagged, which is the worst possible starting point for a
+  // 97-place list. "auto" tags each one with its nearest located city as it goes; an explicit id
+  // puts the whole batch in one city; null keeps the old behaviour.
+  const legs = db.prepare("SELECT id, lat, lng FROM legs WHERE trip_id = ?").all(tripId) as LegPoint[];
+  const auto = req.body.leg_id === "auto";
+  const explicitLeg = auto || req.body.leg_id == null ? null : Number(req.body.leg_id);
+  if (explicitLeg !== null && !legs.some((l) => l.id === explicitLeg)) {
+    throw Object.assign(new Error("That city isn't part of this trip"), { status: 400 });
+  }
+
   const insert = db.prepare(
     `INSERT INTO places (trip_id, leg_id, name, category, lat, lng, duration_min, priority, notes, gmaps_url, status, source)
-     VALUES (?, NULL, ?, ?, ?, ?, 90, 'want', ?, ?, 'active', 'import')`
+     VALUES (?, ?, ?, ?, ?, ?, 90, 'want', ?, ?, 'active', 'import')`
   );
   const tx = db.transaction((rows: ImportCandidate[]) => {
     for (const it of rows) {
@@ -947,7 +1013,8 @@ api.post(`/trips/:id/places/import`, wrap((req, res) => {
       // covered by the coordinates and the Maps link. Takeout candidates have no note field, so
       // they keep the address as the stand-in they always had.
       const notes = typeof it.note === "string" ? it.note : (it.address || "");
-      insert.run(tripId, it.name, category, it.lat, it.lng, notes, it.gmaps_url || "");
+      const legId = auto ? nearestLegId(legs, it.lat, it.lng) : explicitLeg;
+      insert.run(tripId, legId, it.name, category, it.lat, it.lng, notes, it.gmaps_url || "");
     }
   });
   tx(items);

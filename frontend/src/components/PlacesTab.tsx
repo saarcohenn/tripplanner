@@ -71,6 +71,8 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
   const [importSkipped, setImportSkipped] = useState(0);
   const [importSelected, setImportSelected] = useState<Set<number>>(new Set());
   const [importCategory, setImportCategory] = useState("sight");
+  /** "auto" = nearest city per place, "" = leave untagged, or a leg id for the whole batch. */
+  const [importLeg, setImportLeg] = useState("auto");
   const [importing, setImporting] = useState(false);
   const [importFileName, setImportFileName] = useState("");
   const [importUrl, setImportUrl] = useState("");
@@ -130,7 +132,10 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     setImporting(true);
     try {
       const items = importItems.filter((_, i) => importSelected.has(i));
-      await api.post(`/trips/${trip.id}/places/import`, { items, category: importCategory });
+      await api.post(`/trips/${trip.id}/places/import`, {
+        items, category: importCategory,
+        leg_id: importLeg === "auto" ? "auto" : importLeg === "" ? null : Number(importLeg),
+      });
       setImportItems(null);
       setImportOpen(false);
       await refresh();
@@ -304,6 +309,31 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     await refresh();
   }
 
+  // ---- tag the untagged in one go, by nearest located city ----
+  const [autoTagging, setAutoTagging] = useState(false);
+  const [autoTagResult, setAutoTagResult] = useState<string | null>(null);
+  const locatedLegs = legs.filter((l) => l.lat != null && l.lng != null).length;
+
+  async function autoTagUnassigned() {
+    setAutoTagging(true);
+    setAutoTagResult(null);
+    try {
+      const r = await api.post<{ assigned: number; skipped: number }>(
+        `/trips/${trip.id}/places/assign-legs`, { mode: "auto" }
+      );
+      setAutoTagResult(
+        r.assigned === 0
+          ? "Nothing could be matched — those places have no coordinates."
+          : `Tagged ${r.assigned}${r.skipped ? `, left ${r.skipped} alone (no coordinates)` : ""}. Check them below.`
+      );
+      await refresh();
+    } catch (e: any) {
+      setAutoTagResult(e.message);
+    } finally {
+      setAutoTagging(false);
+    }
+  }
+
   async function remove(p: Place) {
     if (!window.confirm(`Delete "${p.name}" permanently? (Use Drop to keep it greyed-out instead.)`)) return;
     await api.del(`/places/${p.id}`);
@@ -315,9 +345,9 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
     const k = p.leg_id;
     byLeg.set(k, [...(byLeg.get(k) || []), p]);
   }
-  const groups: { label: string; items: Place[] }[] = [
+  const groups: { label: string; items: Place[]; unassigned?: boolean }[] = [
     ...legs.map((l) => ({ label: `${l.city}${l.country ? `, ${l.country}` : ""}`, items: (byLeg.get(l.id) || []).filter(matchesFilters) })),
-    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)!.filter(matchesFilters) }] : []),
+    ...(byLeg.has(null) ? [{ label: "Unassigned", items: byLeg.get(null)!.filter(matchesFilters), unassigned: true }] : []),
   ].filter((g) => !anyFilterActive || g.items.length > 0);
 
   return (
@@ -462,11 +492,22 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                   {importSource ? <> in <strong dir="auto">{importSource}</strong></> : null}
                   {importSkipped > 0 ? ` (${importSkipped} skipped — no name/address)` : ""}. Already-in-trip places are unchecked.
                 </p>
-                <label className="block">Add as category
-                  <select value={importCategory} onChange={(e) => setImportCategory(e.target.value)}>
-                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </label>
+                <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+                  <label className="block">Tag with city
+                    <select value={importLeg} onChange={(e) => setImportLeg(e.target.value)}>
+                      <option value="auto" disabled={locatedLegs === 0}>
+                        {locatedLegs > 0 ? "Nearest city, per place" : "Nearest city — needs city coordinates"}
+                      </option>
+                      <option value="">Leave untagged</option>
+                      {legs.map((l) => <option key={l.id} value={String(l.id)}>All in {l.city}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">Add as category
+                    <select value={importCategory} onChange={(e) => setImportCategory(e.target.value)}>
+                      {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  </label>
+                </div>
               </div>
               <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 8 }}>
                 {importItems.map((it, i) => (
@@ -538,7 +579,24 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
 
       {groups.map((g) => (
         <div key={g.label}>
-          <h3 dir="auto">{g.label}</h3>
+          <div className="row spread group-head">
+            <h3 dir="auto">{g.label} <span className="hint">{g.items.length}</span></h3>
+            {/* Only worth offering where there's a backlog to clear — and only when the trip has
+                cities with coordinates to measure against. */}
+            {g.unassigned && g.items.length > 0 && (
+              locatedLegs > 0 ? (
+                <button className="small btn-icon" onClick={autoTagUnassigned} disabled={autoTagging}
+                  title="Tag each of these with the nearest city on the trip (straight-line distance)">
+                  <Globe size={13} /> {autoTagging ? "Tagging…" : "Tag by nearest city"}
+                </button>
+              ) : (
+                <span className="hint">
+                  {legs.length === 0 ? "Add cities on the Overview tab to tag these." : "None of your cities have coordinates yet, so they can't be matched automatically."}
+                </span>
+              )
+            )}
+          </div>
+          {g.unassigned && autoTagResult && <p className="hint">{autoTagResult}</p>}
           {g.items.length === 0 && <p className="hint">No places yet — add them from the map above or the ＋ button.</p>}
           <div className="place-grid">
             {g.items.map((p) => (
@@ -573,6 +631,17 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                       must swallow both or fiddling with a dropdown would move the map. */}
                   <div className="pcard-controls"
                     onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    {/* The city is what decides which days a place can be scheduled in, so it
+                        gets its own full-width row rather than competing for space with the
+                        category and duration. */}
+                    <select
+                      className={`pcard-city${p.leg_id == null ? " unset" : ""}`}
+                      value={p.leg_id ?? ""} aria-label={`City for ${p.name}`}
+                      onChange={(e) => patch(p, { leg_id: e.target.value === "" ? null : Number(e.target.value) })}
+                    >
+                      <option value="">— no city —</option>
+                      {legs.map((l) => <option key={l.id} value={l.id}>{l.city}</option>)}
+                    </select>
                     <select value={p.category} onChange={(e) => patch(p, { category: e.target.value })}>
                       {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                     </select>
