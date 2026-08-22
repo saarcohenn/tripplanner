@@ -1202,8 +1202,65 @@ a { color: var(--accent-dark); }
 .plan-row { list-style: none; }
 .plan-row .item { border-bottom: none; padding: 7px 4px; border-radius: 10px; position: relative; }
 .plan-row .item.selected { background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); }
-.plan-row .item.dragging { opacity: 0.4; }
-.plan-row .item.drag-over { box-shadow: inset 0 2px 0 var(--olive-bright); }
+/* The row the card came from stays as a dimmed outline of the space it is holding, so the list
+   doesn't collapse and re-flow under the finger mid-drag. */
+.plan-row .item.dragging {
+  opacity: 0.35; filter: saturate(0.4);
+  background: var(--card-tint); box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+/* The drop target opens a gap and draws the line the card will land on — an inset shadow read as
+   a highlight on the row rather than as a position between two rows. */
+.plan-row .item {
+  transition: transform 0.16s var(--ease-out), padding-top 0.16s var(--ease-out),
+              background 0.16s var(--ease), box-shadow 0.16s var(--ease);
+}
+.plan-row .item.drag-over { padding-top: 20px; }
+.plan-row .item.drag-over::after {
+  content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 3px;
+  border-radius: 99px; background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  animation: fade 0.14s var(--ease) both;
+}
+/* Where it ended up, said once and quietly, so a drop into a long list doesn't need hunting for. */
+.plan-row .item.just-landed { animation: land 0.45s var(--ease-out) both; }
+@keyframes land {
+  0% { background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); transform: scale(0.985); }
+  60% { background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); transform: none; }
+  100% { background: transparent; box-shadow: none; transform: none; }
+}
+
+/* The card under the pointer. Fixed to the viewport and transform-driven — the only thing during
+   a drag that has to keep up with the finger frame for frame. */
+.drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 1400; pointer-events: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px; border-radius: 11px; font-size: 13px;
+  background: var(--card); border: 1px solid var(--accent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  will-change: transform;
+  animation: lift 0.14s var(--ease-out) both;
+}
+.drag-ghost-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.drag-ghost-text { display: grid; gap: 1px; min-width: 0; }
+.drag-ghost-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drag-ghost-meta { font-size: 11px; color: var(--muted); }
+/* Set when the drag ends: the card flies to the row it became, then hands over to it. */
+.drag-ghost.landing {
+  transition: transform 0.22s var(--ease-out), opacity 0.22s var(--ease), width 0.22s var(--ease-out);
+  animation: none;
+}
+@keyframes lift {
+  from { transform-origin: center; box-shadow: none; }
+  to { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22); }
+}
+/* Nothing should be selecting text or scrolling away while a card is in the air. */
+.plan-layout.dragging-now { user-select: none; -webkit-user-select: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drag-ghost, .drag-ghost.landing { animation: none; transition: opacity 0.15s var(--ease); }
+  .plan-row .item, .plan-row .item.just-landed { transition: none; animation: none; }
+  .plan-row .item.drag-over { padding-top: 20px; }
+}
 .item-drag {
   flex: 0 0 auto; background: none; border: none; box-shadow: none; cursor: grab;
   color: var(--muted); padding: 0 4px; touch-action: none; border-radius: 0;
@@ -1246,8 +1303,15 @@ a { color: var(--accent-dark); }
 .drop-end {
   border: 1px dashed var(--border-strong); border-radius: 10px; padding: 12px;
   text-align: center; font-size: 12px; color: var(--muted); margin-top: 8px;
+  transition: padding 0.16s var(--ease-out), border-color 0.16s var(--ease),
+              background 0.16s var(--ease), color 0.16s var(--ease);
 }
-.drop-end.drag-over { border-color: var(--olive-bright); background: var(--card-tint); color: var(--text); }
+/* Grows to meet the card rather than just changing colour, so the end of the list reads as a
+   place something is about to go rather than as a label that lit up. */
+.drop-end.drag-over {
+  border-color: var(--accent); border-style: solid; background: var(--accent-tint);
+  color: var(--accent-dark); padding: 20px 12px;
+}
 
 .plan-tray {
   background: var(--card-tint); border: 1px dashed var(--border-strong);
@@ -1262,8 +1326,14 @@ a { color: var(--accent-dark); }
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 8px 10px; cursor: grab; touch-action: none; box-shadow: var(--shadow);
 }
+.tray-card {
+  transition: opacity 0.16s var(--ease), transform 0.16s var(--ease-out), box-shadow 0.16s var(--ease);
+}
 .tray-card:active { cursor: grabbing; }
-.tray-card.dragging { opacity: 0.4; }
+/* Same treatment as a dragged item: the source keeps its space, faded, so the tray doesn't
+   re-flow under the finger the moment the card lifts out of it. */
+.tray-card.dragging { opacity: 0.35; filter: saturate(0.4); box-shadow: none; transform: scale(0.98); }
+.plan-tray.drag-over .tray-card:not(.dragging) { opacity: 0.55; }
 .tray-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; margin-top: 4px; align-self: flex-start; }
 .tray-grip { color: var(--muted); flex: 0 0 auto; align-self: center; }
 .tray-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlarmClock, BedDouble, Car, CarTaxiFront, ChevronLeft, ChevronRight, CircleDot, Clock,
   Flame, Footprints, GripVertical, Hotel, Info, Luggage, Map as MapIcon, MapPin, Pencil,
@@ -42,6 +43,9 @@ type DropTarget =
   | { kind: "tray" }
   /** A day chip. Carries the day's id, so a drop still lands right after dates are shuffled. */
   | { kind: "day"; dayId: string };
+
+/** The card that follows the pointer during a drag. Position is written straight to the node. */
+type Ghost = { title: string; meta: string; color: string; width: number; x: number; y: number };
 
 /** Matches the breakpoint where the advisor rail stops sitting beside the days (see styles.css). */
 function useNarrow(): boolean {
@@ -261,6 +265,19 @@ export default function PlanTab({
   // ---------- drag and drop ----------
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  /** The lifted card that follows the pointer. Rendered once per drag; moved imperatively. */
+  const [ghost, setGhost] = useState<Ghost | null>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  /** Set to the item index that just landed, so the real row can play its arrival. */
+  const [landed, setLanded] = useState<number | null>(null);
+  const landTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (landTimer.current) window.clearTimeout(landTimer.current); }, []);
+
+  function flagLanded(index: number) {
+    setLanded(index);
+    if (landTimer.current) window.clearTimeout(landTimer.current);
+    landTimer.current = window.setTimeout(() => setLanded(null), 500);
+  }
 
   function resolveTarget(x: number, y: number): DropTarget | null {
     const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-drop]");
@@ -276,12 +293,36 @@ export default function PlanTab({
 
   // Pointer Events rather than HTML5 drag-and-drop — same choice (and reason) as the leg reorder
   // on the Overview tab: one code path that actually works on a phone.
+  //
+  // The card under the pointer is a copy, moved by writing `transform` straight to the node. It
+  // deliberately does not go through React state: a setState per pointermove drops frames on a
+  // list this long, and the ghost's position is the one thing that has to track the finger exactly.
   function startDrag(e: React.PointerEvent, payload: DragPayload) {
     e.preventDefault();
     setDragging(payload.kind === "item" ? `item-${payload.index}` : `place-${payload.placeId}`);
+
+    const src = (e.currentTarget as HTMLElement).closest<HTMLElement>(".tray-card, .item");
+    const rect = src?.getBoundingClientRect() ?? null;
+    const origin = rect ? { x: rect.left, y: rect.top } : { x: e.clientX, y: e.clientY };
+    // Where inside the card the pointer grabbed it, so the card doesn't jump under the finger.
+    const grab = { x: e.clientX - origin.x, y: e.clientY - origin.y };
+
+    const info = ghostContent(payload);
+    if (info) {
+      setGhost({
+        ...info,
+        width: rect?.width ?? 240,
+        x: origin.x, y: origin.y,
+      });
+    }
+
     let target: DropTarget | null = null;
+    let last = { x: e.clientX, y: e.clientY };
 
     const onMove = (ev: PointerEvent) => {
+      last = { x: ev.clientX, y: ev.clientY };
+      const g = ghostRef.current;
+      if (g) g.style.transform = `translate3d(${ev.clientX - grab.x}px, ${ev.clientY - grab.y}px, 0)`;
       target = resolveTarget(ev.clientX, ev.clientY);
       setOver(
         target == null ? null
@@ -290,37 +331,103 @@ export default function PlanTab({
           : target.kind
       );
     };
+
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       setDragging(null);
       setOver(null);
-      if (target) applyDrop(payload, target);
+      const landing = target ? applyDrop(payload, target) : null;
+      // Dropped nowhere: the card goes back where it came from, so a mis-drop reads as "that
+      // didn't take" rather than as something vanishing.
+      settleGhost(target ? landing : origin, target ? null : origin, last, grab);
     };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   }
 
-  function applyDrop(payload: DragPayload, target: DropTarget) {
+  /** What the lifted card should say. Built from data rather than cloned DOM. */
+  function ghostContent(payload: DragPayload): { title: string; meta: string; color: string } | null {
+    if (payload.kind === "place") {
+      const p = placeById.get(payload.placeId);
+      if (!p) return null;
+      return {
+        title: p.name,
+        meta: `${legCity.get(p.leg_id ?? -1) || "no city"} · ${p.duration_min}m`,
+        color: CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other,
+      };
+    }
+    const it = day?.items?.[payload.index];
+    if (!it) return null;
+    const p = it.place_id != null ? placeById.get(it.place_id) : undefined;
+    return {
+      title: it.title,
+      meta: `${it.time}${it.duration_min ? ` · ${it.duration_min}m` : ""}`,
+      color: p ? CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other : "var(--border-strong)",
+    };
+  }
+
+  /**
+   * Ends the drag by flying the card to where it actually ended up, then fading it as the real
+   * row takes over. `landedIndex` is measured after React has committed, so the destination is
+   * the row's real position rather than a guess at it.
+   */
+  function settleGhost(
+    landedIndex: number | null | { x: number; y: number },
+    home: { x: number; y: number } | null,
+    last: { x: number; y: number },
+    grab: { x: number; y: number }
+  ) {
+    const finish = () => setGhost(null);
+    const g = ghostRef.current;
+    if (!g) return finish();
+
+    const fly = (to: { x: number; y: number; width?: number } | null) => {
+      g.classList.add("landing");
+      if (to) {
+        g.style.transform = `translate3d(${to.x}px, ${to.y}px, 0)`;
+        if (to.width) g.style.width = `${to.width}px`;
+      }
+      g.style.opacity = "0";
+      window.setTimeout(finish, 220);
+    };
+
+    if (home) return fly(home);
+    if (typeof landedIndex !== "number") {
+      // Landed somewhere with no row to fly to — another day, or back in the tray.
+      return fly({ x: last.x - grab.x, y: last.y - grab.y - 12 });
+    }
+    // One frame for the commit to paint, then measure the row it became.
+    requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-drop="index"][data-index="${landedIndex}"]`);
+      const r = row?.getBoundingClientRect();
+      fly(r ? { x: r.left, y: r.top, width: r.width } : null);
+      flagLanded(landedIndex);
+    });
+  }
+
+  /** Returns the index the item landed at in the visible day, or null when it went elsewhere. */
+  function applyDrop(payload: DragPayload, target: DropTarget): number | null {
     const cur = docRef.current;
     const dayId = activeIdRef.current;
-    if (!cur || !dayId) return;
+    if (!cur || !dayId) return null;
     const days = cur.days.map((d) => ({ ...d, items: [...(d.items || [])] }));
     const di = days.findIndex((d) => d.id === dayId);
-    if (di < 0) return;
+    if (di < 0) return null;
     const source = days[di];
 
     let moving: PlanItem;
     if (payload.kind === "item") {
       const found = source.items[payload.index];
-      if (!found) return;
+      if (!found) return null;
       moving = found;
       source.items.splice(payload.index, 1);
     } else {
       const place = placeById.get(payload.placeId);
-      if (!place) return;
+      if (!place) return null;
       moving = itemForPlace(place, "09:00");
     }
 
@@ -329,17 +436,17 @@ export default function PlanTab({
       // tray is a no-op, and the splice above never touched it.
       commit({ ...cur, days });
       setSelected(null);
-      return;
+      return null;
     }
 
     if (target.kind === "day" && target.dayId !== dayId) {
       const tj = days.findIndex((d) => d.id === target.dayId);
-      if (tj < 0) return;
+      if (tj < 0) return null;
       const dest = days[tj];
       dest.items.push({ ...moving, time: timeAt(dest.items, dest.items.length, dest.wake_time) });
       commit({ ...cur, days });
       setSelected(null);
-      return;
+      return null;
     }
 
     let idx = target.kind === "end" || target.kind === "day" ? source.items.length : target.index;
@@ -350,6 +457,7 @@ export default function PlanTab({
     source.items.splice(idx, 0, { ...moving, time });
     commit({ ...cur, days });
     setSelected(null);
+    return idx;
   }
 
   // ---------- derived views ----------
@@ -489,7 +597,24 @@ export default function PlanTab({
   const stamp = plan?.mode === "manual" && plan?.edited_at ? `edited ${plan.edited_at} UTC` : `generated ${plan?.generated_at} UTC`;
 
   return (
-    <div className={`plan-layout${railOpen ? "" : " rail-collapsed"}`}>
+    <div className={`plan-layout${railOpen ? "" : " rail-collapsed"}${ghost ? " dragging-now" : ""}`}>
+      {/* Into <body>, for the same reason the date popover goes there: .plan-days scrolls, and a
+          scroll container clips a card being dragged over its edge. */}
+      {ghost && createPortal(
+        <div
+          ref={ghostRef} className="drag-ghost" aria-hidden="true"
+          style={{ width: ghost.width, transform: `translate3d(${ghost.x}px, ${ghost.y}px, 0)` }}
+        >
+          <span className="drag-ghost-dot" style={{ background: ghost.color }} />
+          <span className="drag-ghost-text">
+            <strong dir="auto">{ghost.title}</strong>
+            <span className="drag-ghost-meta">{ghost.meta}</span>
+          </span>
+          <GripVertical size={13} className="tray-grip" />
+        </div>,
+        document.body
+      )}
+
       {surveyOpen && (
         <TransportSurvey legs={legs} bookings={bookings} onSet={setLegTransport} onClose={() => setSurveyOpen(false)} />
       )}
@@ -650,7 +775,8 @@ export default function PlanTab({
                         `item kind-${it.kind}` +
                         (selected === i ? " selected" : "") +
                         (dragging === `item-${i}` ? " dragging" : "") +
-                        (over === `index-${i}` ? " drag-over" : "")
+                        (over === `index-${i}` ? " drag-over" : "") +
+                        (landed === i ? " just-landed" : "")
                       }
                     >
                       {editing && (
