@@ -109,6 +109,19 @@ CREATE TABLE IF NOT EXISTS plan_chat (
 );
 CREATE INDEX IF NOT EXISTS idx_plan_chat_day ON plan_chat(trip_id, day_id, id);
 
+-- Advice about ONE day. The trip-wide advisor answers "is this whole trip sane", which is the
+-- right question once and far too much to read while you are editing Tuesday. content_hash is
+-- taken over the day itself, so advice invalidates the moment the day it describes changes —
+-- no guessing from timestamps about whether it is still talking about what is on screen.
+CREATE TABLE IF NOT EXISTS day_advice (
+  day_id TEXT PRIMARY KEY,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  json TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  generated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_day_advice_trip ON day_advice(trip_id);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,

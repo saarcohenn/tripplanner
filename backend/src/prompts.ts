@@ -305,6 +305,60 @@ Otherwise reply as JSON with this exact shape:
   };
 }
 
+/**
+ * The advisor, narrowed to one day.
+ *
+ * The trip-wide review answers "is this whole trip survivable", which is worth reading once and is
+ * far too much while you are moving things around on Tuesday. This asks the same kind of question
+ * about a single day, and is held to a hard budget: at most three points, each about *this* day.
+ * The no-new-places rule is unchanged — it critiques, it never suggests somewhere to go.
+ */
+export function dayAdvicePrompt(args: {
+  bundle: TripBundle;
+  day: any;
+  before: any | null;
+  after: any | null;
+  transport: string;
+}): { system: string; user: string } {
+  const { bundle, day, before, after, transport } = args;
+  const line = (d: any) =>
+    d ? `${d.date} in ${d.city || "?"}: ${(d.items || []).length} items, wake ${d.wake_time || "?"}` : "(none)";
+  const items = (day.items || [])
+    .map((it: any) => `  ${it.time} ${it.kind} "${it.title}" ${it.duration_min || 0}min${it.pinned ? " FIXED" : ""}`)
+    .join("\n");
+
+  return {
+    system: `You review ONE day of a traveller's itinerary. You are blunt, specific and short.
+
+You must NEVER suggest a new place, restaurant, attraction or activity — not one. You may only say: this is too much, this is too little, this order wastes travel, this needs an earlier start, this leaves no time to eat, this day is fine. If the day is fine, say so in one line and return no points; inventing a problem to look useful is the worst thing you can do here.
+
+Budget: at most 3 points. Fewer is better. Each one must be about THIS day and must name what to actually do about it.
+
+Reply with ONLY a JSON object, no prose.`,
+    user: `${bundleText(bundle)}
+
+THE DAY UNDER REVIEW — ${day.date}, ${day.city || "city unknown"}
+Wake ${day.wake_time || "?"}. Getting around: ${transport || "not stated (assume public transport)"}.
+Summary: ${day.summary || "(none)"}
+Items:
+${items || "  (nothing scheduled)"}
+
+The day before — ${line(before)}
+The day after  — ${line(after)}
+
+Reply as JSON with this exact shape:
+{
+  "verdict": "one line: how this day actually reads. Say 'This day is fine' when it is.",
+  "load": "light|comfortable|full|too much",
+  "points": [
+    { "type": "overload|early_wake|rest_needed|transit_heavy|gap|timing|budget",
+      "message": "one specific sentence, naming the item or the hour it is about" }
+  ]
+}
+"points" may be empty. Never more than 3.`,
+  };
+}
+
 export function importPrompt(conversationText: string): { system: string; user: string } {
   return {
     system: `You extract structured trip data from a travel-planning conversation (any language, including Hebrew). Extract ONLY what the conversation actually contains — do not invent places or dates. Keep place/city names in English when a well-known English name exists, otherwise keep the original. Estimate lat/lng for well-known cities and famous places when you are confident; otherwise use null.

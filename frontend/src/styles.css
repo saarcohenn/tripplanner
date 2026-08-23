@@ -1414,6 +1414,38 @@ a { color: var(--accent-dark); }
 }
 .rail-tabs button:hover:not(:disabled) { border-color: var(--accent); box-shadow: none; transform: none; }
 .rail-tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+/* The day's own read, at the top of the rail. Short by construction — three points at most. */
+.day-advice { display: grid; gap: 8px; margin-bottom: 14px; }
+.day-advice h3 { margin: 0; }
+.day-advice p { margin: 0; font-size: 13px; }
+.day-advice .alert { margin: 0; }
+.day-load {
+  justify-self: start; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; border-radius: 999px; padding: 3px 10px;
+  background: var(--card-tint); color: var(--muted); border: 1px solid var(--border-strong);
+}
+.day-load.load-light { color: var(--olive); border-color: var(--olive); }
+.day-load.load-comfortable { color: var(--olive); border-color: var(--olive); }
+.day-load.load-full { color: var(--accent-dark); border-color: var(--accent); }
+.day-load.load-too-much { color: var(--danger); border-color: var(--danger); }
+
+/* The whole-trip review keeps its place but folds away — reading twenty-one days of notes to
+   find the one about today was the actual complaint. */
+.trip-review { border-top: 1px solid var(--border); padding-top: 10px; }
+.trip-review > summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  list-style: none; padding: 4px 0;
+}
+.trip-review > summary::-webkit-details-marker { display: none; }
+.trip-review > summary::after {
+  content: "▾"; margin-left: auto; font-size: 10px;
+  transition: transform 0.18s var(--ease-out);
+}
+.trip-review[open] > summary::after { transform: rotate(180deg); }
+.trip-review > summary:hover { color: var(--text); }
+.trip-review h2 { font-size: 13px; }
+
 .alert-date {
   background: none; border: none; box-shadow: none; padding: 0; border-radius: 0;
   font-weight: 700; font-size: inherit; color: var(--accent-dark); text-decoration: underline;
@@ -1520,6 +1552,23 @@ a { color: var(--accent-dark); }
   font-size: 40px; background: var(--card-tint); color: var(--muted);
 }
 .pcard-body { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+/* The note reads as text until you touch it, then behaves as the field it always was. The mark
+   in front says where it came from, which is the difference between "I wrote this" and "a model
+   pulled it out of a chat". */
+.pcard-note { display: flex; gap: 6px; align-items: flex-start; }
+.pcard-note-mark { flex: 0 0 auto; margin-top: 3px; color: var(--muted); display: inline-flex; }
+.pcard-note-mark.ai { color: var(--accent); }
+.pcard-note-mark.import { color: var(--olive); }
+.pcard-note textarea {
+  flex: 1; min-width: 0; resize: none; overflow: hidden;
+  font-size: 12px; line-height: 1.45; color: var(--muted);
+  padding: 2px 4px; border-radius: 7px;
+  border-color: transparent; background: transparent;
+}
+.pcard-note textarea:hover { border-color: var(--border-strong); background: var(--card); }
+.pcard-note textarea:focus { border-color: var(--accent); background: var(--card); color: var(--text); }
+.pcard-note textarea::placeholder { color: var(--placeholder); }
+
 .pcard-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .pcard-controls select, .pcard-controls input { font-size: 12px; padding: 5px 7px; }
 /* The city decides which days a place can be scheduled in, so it leads on its own row rather

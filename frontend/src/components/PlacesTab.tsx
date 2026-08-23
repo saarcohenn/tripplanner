@@ -1,11 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Download, Globe, ImageOff, Link2, Map as MapIcon, Sparkles, Upload, X } from "lucide-react";
+import {
+  Camera, Download, Globe, ImageOff, Link2, Map as MapIcon, MapPinned, Sparkles, StickyNote,
+  Upload, X,
+} from "lucide-react";
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 import TripMap, { CATEGORY_COLORS } from "./TripMap";
 
 const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
+
+/** Where a place's note came from — worth saying, because it changes how much to trust it. */
+const NOTE_SOURCE: Record<string, { Icon: typeof StickyNote; label: string }> = {
+  ai: { Icon: Sparkles, label: "Pulled out of your conversation by the AI" },
+  import: { Icon: MapPinned, label: "Your own note, from the Google Maps list" },
+  user: { Icon: StickyNote, label: "Your note" },
+};
+
+/** A one-line note shouldn't reserve three lines, and a three-line one shouldn't need scrolling. */
+function autoGrow(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
 
 type NameHit = { name: string; address: string; lat: number | null; lng: number | null; google_place_id?: string; photo_ref?: string };
 type ImportCandidate = {
@@ -619,14 +635,23 @@ export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generat
                     <a href={gmapsLink(p)} target="_blank" rel="noreferrer" title="Open in Google Maps"
                       onClick={(e) => e.stopPropagation()}><MapIcon size={15} /></a>
                   </div>
-                  {p.notes && (
-                    <div className="hint" dir="auto">
-                      {p.source === "ai" && (
-                        <Sparkles size={11} className="ai-mark" aria-label="Extracted by AI from your conversation" />
-                      )}{" "}
-                      {p.notes}
-                    </div>
-                  )}
+                  {/* Notes were read-only, and the only icon marked AI-extracted ones — so a note
+                      you wrote yourself in Google Maps arrived unmarked and uneditable, which is
+                      backwards: yours is the one worth being able to change. */}
+                  <div className="pcard-note"
+                    onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    <span className={`pcard-note-mark ${p.source}`} title={NOTE_SOURCE[p.source]?.label || "Note"}
+                      aria-label={NOTE_SOURCE[p.source]?.label || "Note"}>
+                      {(() => { const I = NOTE_SOURCE[p.source]?.Icon || StickyNote; return <I size={11} />; })()}
+                    </span>
+                    <textarea
+                      dir="auto" rows={1} className="subtle" defaultValue={p.notes}
+                      placeholder="Add a note…" aria-label={`Note for ${p.name}`}
+                      onInput={(e) => autoGrow(e.currentTarget)}
+                      ref={(el) => { if (el) autoGrow(el); }}
+                      onBlur={(e) => { if (e.target.value !== p.notes) patch(p, { notes: e.target.value }); }}
+                    />
+                  </div>
                   {/* The card selects on click and jumps on double-click, so its controls
                       must swallow both or fiddling with a dropdown would move the map. */}
                   <div className="pcard-controls"

@@ -5,7 +5,7 @@ import path from "node:path";
 import { db, bumpPlanVersion, getSetting, setSetting, seedDemoIfEmpty, DATA_DIR } from "./db.js";
 import { complete, extractJson, listModels, loadLlmConfig, DEFAULT_MODELS } from "./llm.js";
 import {
-  planPrompt, advisorPrompt, dayChatPrompt, importPrompt, insightPrompt, mergePrompt,
+  planPrompt, advisorPrompt, dayAdvicePrompt, dayChatPrompt, importPrompt, insightPrompt, mergePrompt,
   DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle,
 } from "./prompts.js";
 import { requireUser, requireAdmin, safeUser } from "./auth.js";
@@ -605,6 +605,91 @@ api.post("/trips/:id/plan/chat", wrap(async (req, res) => {
   ).all(tripId, dayId);
 
   res.json({ reply, proposal, searched, messages });
+}));
+
+// ---------- the advisor, one day at a time ----------
+// Cached against a hash of the day itself rather than a timestamp, so "is this still about what
+// I'm looking at" is a fact instead of an inference.
+
+/** Only the parts of a day that could change the advice — a retitled summary shouldn't invalidate it. */
+export function dayFingerprint(day: any, transport: string): string {
+  const shape = {
+    date: day.date, city: day.city, wake: day.wake_time, transport,
+    items: (day.items || []).map((it: any) => [it.time, it.kind, it.title, it.duration_min, it.place_id]),
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(shape)).digest("hex").slice(0, 32);
+}
+
+/** The day, its neighbours and how that city is crossed — everything the day prompt needs. */
+function dayContext(tripId: number, dayId: string) {
+  const planRow: any = db.prepare("SELECT * FROM plans WHERE trip_id = ? ORDER BY id DESC LIMIT 1").get(tripId);
+  if (!planRow) throw Object.assign(new Error("This trip has no plan yet"), { status: 400 });
+  let doc: any = null;
+  try { doc = JSON.parse(planRow.plan_json); } catch { /* handled below */ }
+  const days: any[] = doc?.days || [];
+  const i = days.findIndex((d) => d.id === dayId);
+  if (i < 0) throw Object.assign(new Error("That day is no longer in the plan"), { status: 404 });
+  const day = days[i];
+  const bundle = getBundle(tripId);
+  const leg = (bundle.legs as any[]).find(
+    (l) => l.arrive_date && l.depart_date && l.arrive_date <= day.date && day.date <= l.depart_date
+  );
+  return { bundle, day, before: days[i - 1] ?? null, after: days[i + 1] ?? null, transport: leg?.transport || "" };
+}
+
+api.get("/trips/:id/plan/day-advice", wrap((req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripAccess(req.user.id, tripId);
+  const dayId = String(req.query.day_id || "");
+  if (!dayId) throw Object.assign(new Error("day_id is required"), { status: 400 });
+  const row = db.prepare("SELECT json, content_hash, generated_at FROM day_advice WHERE day_id = ?").get(dayId) as
+    | { json: string; content_hash: string; generated_at: string }
+    | undefined;
+  if (!row) return void res.json({ advice: null, stale: false, generated_at: null });
+  const { day, transport } = dayContext(tripId, dayId);
+  res.json({
+    advice: JSON.parse(row.json),
+    // Kept and shown rather than dropped: yesterday's read on a day you have since nudged is
+    // still worth something, as long as it says it is out of date.
+    stale: row.content_hash !== dayFingerprint(day, transport),
+    generated_at: row.generated_at,
+  });
+}));
+
+api.post("/trips/:id/plan/day-advice", wrap(async (req, res) => {
+  const tripId = Number(req.params.id);
+  assertTripWrite(req.user.id, tripId);
+  const dayId = String(req.body.day_id || "");
+  if (!dayId) throw Object.assign(new Error("day_id is required"), { status: 400 });
+
+  const { bundle, day, before, after, transport } = dayContext(tripId, dayId);
+  const hash = dayFingerprint(day, transport);
+  const existing = db.prepare("SELECT json, content_hash, generated_at FROM day_advice WHERE day_id = ?").get(dayId) as
+    | { json: string; content_hash: string; generated_at: string }
+    | undefined;
+  if (existing && existing.content_hash === hash && !req.body.refresh) {
+    return void res.json({ advice: JSON.parse(existing.json), stale: false, generated_at: existing.generated_at });
+  }
+
+  const p = dayAdvicePrompt({ bundle, day, before, after, transport });
+  const raw = await complete(p.system, p.user, loadLlmConfig(req.user), "advisor", req.user.id);
+  const out = extractJson<any>(raw);
+  const advice = {
+    verdict: typeof out?.verdict === "string" ? out.verdict.slice(0, 400) : "",
+    load: ["light", "comfortable", "full", "too much"].includes(out?.load) ? out.load : "",
+    // The budget is enforced here, not just asked for — a prompt is a request, this is the rule.
+    points: (Array.isArray(out?.points) ? out.points : [])
+      .filter((pt: any) => pt && typeof pt.message === "string" && pt.message.trim())
+      .slice(0, 3)
+      .map((pt: any) => ({ type: String(pt.type || "timing"), message: pt.message.trim().slice(0, 400) })),
+  };
+  db.prepare(
+    `INSERT INTO day_advice (day_id, trip_id, json, content_hash, generated_at) VALUES (?,?,?,?,datetime('now'))
+     ON CONFLICT(day_id) DO UPDATE SET json = excluded.json, content_hash = excluded.content_hash,
+       generated_at = excluded.generated_at, trip_id = excluded.trip_id`
+  ).run(dayId, tripId, JSON.stringify(advice), hash);
+  const saved = db.prepare("SELECT generated_at FROM day_advice WHERE day_id = ?").get(dayId) as { generated_at: string };
+  res.json({ advice, stale: false, generated_at: saved.generated_at });
 }));
 
 // ---------- per-place insights (one small LLM call, cached forever) ----------

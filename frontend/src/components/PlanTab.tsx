@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlarmClock, BedDouble, Car, CarTaxiFront, ChevronLeft, ChevronRight, CircleDot, Clock,
+  AlarmClock, BedDouble, CalendarCheck, Car, CarTaxiFront, ChevronLeft, ChevronRight, CircleDot, Clock,
   Flame, Footprints, GripVertical, Hotel, Info, Luggage, Map as MapIcon, MapPin, Pencil,
   PanelRightClose, Plane, Plus, Route, Shuffle, Sparkles, Sunrise, TrainFront, Trash2,
   TriangleAlert, UtensilsCrossed, Wallet, Wand2,
@@ -17,6 +17,7 @@ import type {
   TransportMode, TripDetail,
 } from "../types";
 import { DatePicker } from "./DateRangePicker";
+import DayAdvisor from "./DayAdvisor";
 import DayChat from "./DayChat";
 import DayMap, { DayStop } from "./DayMap";
 import PlaceInsightPanel from "./PlaceInsightPanel";
@@ -81,6 +82,8 @@ export default function PlanTab({
   /** How much the advisor is actually saying — shown on the tab so the rail reads as live. */
   const adviceCount =
     (advisor?.pacing_alerts?.length || 0) + (advisor?.drop_suggestions?.length || 0);
+  /** The trip review's undated parts — the only bits that still belong in a whole-trip section. */
+  const tripWideCount = advisor?.drop_suggestions?.length || 0;
   /** The advice was written against the plan as it stood at generated_at; edits came after. */
   const adviceStale = !!plan?.edited_at && !!plan?.generated_at && plan.edited_at > plan.generated_at;
 
@@ -152,6 +155,11 @@ export default function PlanTab({
   const mode: TransportMode = activeLeg?.transport || "";
   /** Jump the strip to whichever day now sits on this date — used by the advisor's date links. */
   const goToDate = (d: string) => setActiveId(days.find((x) => x.date === d)?.id ?? activeId);
+
+  // The trip review's dated entries, narrowed to the day on screen. Twenty-one days of notes is
+  // the "too much information" — the two that are about today are the useful part of it.
+  const dayAlerts = (advisor?.pacing_alerts || []).filter((a) => a.date === activeDate);
+  const dayNotes = (advisor?.day_notes || []).filter((n) => n.date === activeDate);
 
   const [editing, setEditing] = useState(false);
   const [showMap, setShowMap] = useState(true);
@@ -972,8 +980,30 @@ export default function PlanTab({
           )
         ) : (
           <>
+            {/* Day first. The trip-wide review is below and folded away: it is the right thing to
+                read once, and the wrong thing to have open while you are moving items around. */}
+            {day && <DayAdvisor tripId={trip.id} day={day} llmReady={llmReady} />}
+
+            {/* The dated parts of the trip-wide review, narrowed to the day on screen. */}
+            {(dayAlerts.length > 0 || dayNotes.length > 0) && (
+              <section className="day-advice">
+                <h3 className="icon-line"><CalendarCheck size={14} /> From the trip review</h3>
+                {dayAlerts.map((a, i) => (
+                  <div key={i} className={`alert small type-${a.type}`}>
+                    <AdvisorIcon type={a.type} /> <span dir="auto">{a.message}</span>
+                  </div>
+                ))}
+                {dayNotes.map((n, i) => <p key={i} className="hint" dir="auto">{n.note}</p>)}
+              </section>
+            )}
+
+            <details className="trip-review">
+              <summary>
+                <Sparkles size={13} className="ai-mark" /> Across the whole trip
+                {tripWideCount > 0 && <span className="rail-count">{tripWideCount}</span>}
+              </summary>
             <div className="row spread">
-              <h2 className="icon-line"><Sparkles size={15} className="ai-mark" /> Advisor</h2>
+              <h2 className="icon-line">Trip review</h2>
               <button className="small" onClick={reAdvise} disabled={!llmReady || advising}>{advising ? "…" : "Re-analyze"}</button>
             </div>
             <p className="hint">
@@ -1033,6 +1063,7 @@ export default function PlanTab({
                 )}
               </>
             )}
+            </details>
           </>
         )}
         </>

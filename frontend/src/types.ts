@@ -200,6 +200,20 @@ export type PlanRow = {
   edited_at: string | null;
 };
 
+/** The advisor's read on a single day. Capped at three points server-side, not just in the prompt. */
+export type DayAdvice = {
+  verdict: string;
+  load: "" | "light" | "comfortable" | "full" | "too much";
+  points: { type: string; message: string }[];
+};
+
+export type DayAdviceResult = {
+  advice: DayAdvice | null;
+  /** The day has been edited since this was written — kept and labelled rather than discarded. */
+  stale: boolean;
+  generated_at: string | null;
+};
+
 /** One turn of the per-day chat. Kept server-side so the thread survives a reload. */
 export type ChatMessage = {
   id: number;
