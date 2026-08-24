@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS places (
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
   leg_id INTEGER REFERENCES legs(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
-  category TEXT DEFAULT 'sight',                  -- sight | food | nature | museum | shopping | nightlife | other
+  category TEXT DEFAULT 'sight',                  -- sight | attractions | landmarks | food | nature | shopping | nightlife | other
   lat REAL,
   lng REAL,
   duration_min INTEGER DEFAULT 90,
@@ -260,6 +260,11 @@ addColumn("legs", "transport TEXT DEFAULT ''"); // '' | transit | car | walk | t
 addColumn("plans", "mode TEXT DEFAULT 'llm'"); // llm | manual
 addColumn("plans", "edited_at TEXT");
 
+// 'museum' was dropped in favour of 'attractions' and 'landmarks'. Left alone, those places would
+// keep a category no dropdown offers and no colour maps — they'd fall through to the "other" grey
+// and be uneditable back to anything sensible. 'attractions' is the nearer meaning of the two.
+db.prepare("UPDATE places SET category = 'attractions' WHERE category = 'museum'").run();
+
 // Rooms used to have only 'owner'/'member' roles; 'member' is now split into 'editor'/'viewer'.
 // Existing non-owner members keep the edit rights they already had rather than being silently
 // downgraded to read-only.
@@ -388,7 +393,7 @@ export function seedDemoIfEmpty(roomId: number) {
   insPlace.run(tripId, kyoto, "Kinkaku-ji", "sight", 35.0394, 135.7292, 90, "want");
   insPlace.run(tripId, tokyo, "Shibuya Crossing", "sight", 35.6595, 139.7005, 60, "must");
   insPlace.run(tripId, tokyo, "Senso-ji Temple", "sight", 35.7148, 139.7967, 90, "must");
-  insPlace.run(tripId, tokyo, "teamLab Planets", "museum", 35.649, 139.7898, 150, "want");
+  insPlace.run(tripId, tokyo, "teamLab Planets", "attractions", 35.649, 139.7898, 150, "want");
 
   const insTodo = db.prepare(
     `INSERT INTO todos (trip_id, text, category, due_date) VALUES (?, ?, ?, ?)`

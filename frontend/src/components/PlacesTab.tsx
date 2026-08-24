@@ -8,7 +8,7 @@ import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
 import TripMap, { CATEGORY_COLORS } from "./TripMap";
 
-const CATEGORIES = ["sight", "food", "nature", "museum", "shopping", "nightlife", "other"];
+const CATEGORIES = ["sight", "attractions", "landmarks", "food", "nature", "shopping", "nightlife", "other"];
 
 /** Where a place's note came from — worth saying, because it changes how much to trust it. */
 const NOTE_SOURCE: Record<string, { Icon: typeof StickyNote; label: string }> = {

@@ -1035,8 +1035,12 @@ a { color: var(--accent-dark); }
      included — so the advisor's width comes out of the sum before the column is centred.
      (cqw doesn't help: an element can't be its own query container, so it would resolve
      against the viewport.) Only reached side-by-side; stacked, the rule below wins. */
-  padding: 14px max(22px, (100% - var(--rail-w) - 820px) / 2) 28px;
+  /* No top padding, deliberately. A sticky child is clamped to its containing block's *content*
+     box, so 14px of padding here left .day-nav stuck 14px below the scrollport with the day card
+     scrolling through the gap above it. The breathing room moves to the first child instead. */
+  padding: 0 max(22px, (100% - var(--rail-w) - 820px) / 2) 28px;
 }
+.plan-days > :first-child { margin-top: 14px; }
 .advisor {
   width: var(--rail-w); min-width: var(--rail-w); overflow-y: auto;
   border-left: 1px solid var(--border); background: var(--card-tint); padding: 16px;
@@ -1077,7 +1081,7 @@ a { color: var(--accent-dark); }
    tablet gets the stacked layout the phone always had. */
 @media (max-width: 1110px) {
   .plan-layout { flex-direction: column; overflow-y: auto; }
-  .plan-days { overflow: visible; padding: 10px 12px; }
+  .plan-days { overflow: visible; padding: 0 12px 10px; }
   .advisor {
     width: 100%; min-width: 0; overflow: visible;
     border-left: none; border-top: 1px solid var(--border);
@@ -1268,8 +1272,13 @@ a { color: var(--accent-dark); }
 }
 .item-drag:hover:not(:disabled) { background: none; border: none; box-shadow: none; color: var(--text); transform: none; }
 .item-drag:active { cursor: grabbing; }
-.item-info {
-  width: 28px; height: 28px; align-self: center; background: none; border: none;
+/* The right-hand end of a row: how long it takes, and the way into what it is. Kept on the first
+   line whatever the row's height, so a three-line item lines up with a one-line one. */
+.item-end { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; align-self: flex-start; margin-top: 1px; }
+/* Scoped past .icon-btn, which is defined later in the file and was winning the 34px size — the
+   button towered over the 19px duration beside it. */
+.item .item-info, .item-end .item-info {
+  width: 26px; height: 26px; align-self: center; background: none; border: none;
   box-shadow: none; color: var(--muted);
 }
 .item-info:hover:not(:disabled) { background: var(--accent-tint); border: none; box-shadow: none; color: var(--accent-dark); transform: none; }

@@ -824,11 +824,23 @@ export default function PlanTab({
                             {it.details && <div className="item-details" dir="auto">{it.details}</div>}
                             {it.tip && <div className="item-tip icon-line" dir="auto"><Sparkles size={11} className="ai-mark" /> {it.tip}</div>}
                           </span>
-                          <span className="hint nowrap">{it.duration_min ? `${it.duration_min}m` : ""}</span>
+                          {/* Duration and the info button ride together on the first line. Left
+                              as separate flex children the button took align-self:center and sank
+                              to the middle of a three-line row while the duration stayed at the
+                              top, which is the alignment that broke. */}
+                          <span className="item-end">
+                            <span className="hint nowrap">{it.duration_min ? `${it.duration_min}m` : ""}</span>
+                            {place && (
+                              <button
+                                className="icon-btn item-info" title={`About ${place.name}`} aria-label={`About ${place.name}`}
+                                onClick={() => { setSelected(i); setRail("place"); }}
+                              ><Info size={14} /></button>
+                            )}
+                          </span>
                         </>
                       )}
 
-                      {place && (
+                      {editing && place && (
                         <button
                           className="icon-btn item-info" title={`About ${place.name}`} aria-label={`About ${place.name}`}
                           onClick={() => { setSelected(i); setRail("place"); }}

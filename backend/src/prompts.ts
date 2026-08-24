@@ -197,7 +197,7 @@ Reply as JSON with this exact shape:
   ],
   "places": [
     { "name": "string", "city": "which city it belongs to", "existing_leg_id": leg id from the list above or null,
-      "category": "sight|food|nature|museum|shopping|nightlife|other", "duration_min": estimated minutes,
+      "category": "sight|attractions|landmarks|food|nature|shopping|nightlife|other", "duration_min": estimated minutes,
       "priority": "must|want|maybe", "lat": number or null, "lng": number or null, "notes": "short note or empty" }
   ],
   "todos": [ { "text": "string", "category": "general|booking|documents|packing|money", "due_date": "YYYY-MM-DD or null" } ],
@@ -385,7 +385,7 @@ Extract the trip as JSON with this exact shape:
       "lat": number or null, "lng": number or null }
   ],
   "places": [
-    { "name": "string", "city": "which leg city it belongs to", "category": "sight|food|nature|museum|shopping|nightlife|other",
+    { "name": "string", "city": "which leg city it belongs to", "category": "sight|attractions|landmarks|food|nature|shopping|nightlife|other",
       "duration_min": estimated minutes, "priority": "must|want|maybe", "lat": number or null, "lng": number or null,
       "notes": "short note from the conversation or empty" }
   ],
