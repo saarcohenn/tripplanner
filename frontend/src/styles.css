@@ -1725,6 +1725,55 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 }
 .exp-breakdown { min-width: 0; }
 
+/* ---------- one card per day of spending ---------- */
+/* The flat list of expenses was every row at the same weight, so "what did Tuesday cost"
+   meant adding up fifteen of them by eye. Each day is a small table now: which day of the
+   trip, its date, what it came to, and the mix underneath. */
+.day-exp-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 20px; }
+.day-exp {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow); overflow: hidden;
+  animation: rise 0.3s var(--ease-out) both;
+}
+.day-exp-head { display: flex; align-items: baseline; gap: 10px; padding: 11px 14px 9px; }
+/* Day number first and always the same width, so the column of them reads as a count of
+   days rather than as text that happens to start with "Day". */
+.day-exp-no {
+  flex: 0 0 auto; min-width: 54px; text-align: center;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--card-tint); border: 1px solid var(--border-strong); color: var(--muted);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+/* Nothing to number: the dash says the date is missing, not that the day is. */
+.day-exp-no.undated { border-style: dashed; }
+.day-exp-date { font-size: 13px; font-weight: 600; min-width: 0; }
+.day-exp-total { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.day-exp-rows { border-top: 1px solid var(--table-line); }
+/* Inside a day card the rows are a table, not a stack of cards: the .bcard shell keeps its
+   hover and its expanding body but gives up its own border, radius and shadow. */
+.day-exp .bcard {
+  margin: 0; border: none; border-radius: 0; box-shadow: none; background: none;
+  animation: none;
+}
+.day-exp .bcard:hover { box-shadow: none; border-color: transparent; }
+.day-exp .bcard + .bcard { border-top: 1px solid var(--table-line); }
+
+/* ---------- category bar ---------- */
+/* A thin stacked bar of one day's categories. The 2px gaps are surface showing through, so
+   two neighbouring hues never merge into one shape — no border is drawn around a segment.
+   The row is 24px tall and the fill only 8px of it: the rest is hover target, because an
+   8px strip is a pinpoint to land a pointer on. */
+.catbar { display: flex; align-items: stretch; gap: 2px; height: 24px; margin: 0 14px 8px; }
+.catbar-seg {
+  min-width: 4px; padding: 8px 0; background-clip: content-box;
+  transition: filter 0.18s var(--ease);
+}
+.catbar-seg:hover { filter: brightness(1.08); }
+.catbar-seg:first-child { border-radius: 999px 0 0 999px; }
+.catbar-seg:last-child { border-radius: 0 999px 999px 0; }
+.catbar-seg:only-child { border-radius: 999px; }
+
 /* ---------- donut charts ---------- */
 /* Chart beside its legend once there's room, stacked on a phone. */
 .donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
