@@ -1735,7 +1735,7 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
   box-shadow: var(--shadow); overflow: hidden;
   animation: rise 0.3s var(--ease-out) both;
 }
-.day-exp-head { display: flex; align-items: baseline; gap: 10px; padding: 11px 14px 9px; }
+.day-exp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 11px 14px 9px; }
 /* Day number first and always the same width, so the column of them reads as a count of
    days rather than as text that happens to start with "Day". */
 .day-exp-no {
@@ -1747,8 +1747,18 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 }
 /* Nothing to number: the dash says the date is missing, not that the day is. */
 .day-exp-no.undated { border-style: dashed; }
-.day-exp-date { font-size: 13px; font-weight: 600; min-width: 0; }
-.day-exp-total { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The date takes the middle at its own width rather than a full-width box that shrinks, so
+   the line breaks before any of the three pieces does. A home currency that prints
+   ₩12,345,678 then drops the total onto its own line on a 320px phone instead of wrapping
+   the date under it or breaking the number in half; hiding overflow is the last guard. */
+.day-exp-date {
+  flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.day-exp-total {
+  margin-left: auto; white-space: nowrap;
+  font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
 .day-exp-rows { border-top: 1px solid var(--table-line); }
 /* Inside a day card the rows are a table, not a stack of cards: the .bcard shell keeps its
    hover and its expanding body but gives up its own border, radius and shadow. */
