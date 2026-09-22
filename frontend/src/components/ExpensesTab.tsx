@@ -360,7 +360,7 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
             <section className="day-exp" key={g.date || "undated"}>
               <header className="day-exp-head">
                 {badge && <span className={`day-exp-no${g.date ? "" : " undated"}`}>{badge}</span>}
-                <span className="day-exp-date grow">
+                <span className="day-exp-date">
                   {g.date ? fmtDayLabel(g.date) : `${g.items.length} ${g.items.length === 1 ? "expense" : "expenses"}`}
                 </span>
                 <span className="day-exp-total">{fmtMoney(g.total, home)}</span>
