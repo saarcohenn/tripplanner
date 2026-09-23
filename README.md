@@ -5,7 +5,9 @@ schedule — and, unlike every other travel site, **never suggests new places**.
 tells you what to *drop*, when to *rest*, and when you'll have to *wake up early* to make
 your own plan work.
 
-![Daily plan with advisor](docs/screenshots/plan-desktop.png)
+![Daily plan with the advisor rail](docs/screenshots/plan-desktop.png)
+
+<sub>Screenshots are of a seeded demo trip.</sub>
 
 ## TL;DR — run it in 2 minutes
 
@@ -44,36 +46,67 @@ volume; the `.env` file stays on your machine and is never baked into the image.
 
 | | |
 |---|---|
-| **Plan, not suggestions** | Your configured LLM arranges *only the places you added* into a detailed daily guide: directions between stops, queue-avoidance tips, meals, transit, rest blocks, and a per-day **alarm suggestion** ("Alarm 06:45 — be at Fushimi Inari by 07:30, before the tour groups"). |
-| **Advisor** | Reviews the plan and flags overloaded days, drop candidates, needed rest and early wake-ups. Hard-prompted to never recommend new attractions. |
-| **Multi-city trips** | A trip is an ordered list of legs (city + date range). One-way, round-trip and multi-city all work. |
-| **Money** | Log expenses in any currency (trip-local currencies suggested first), booking costs included automatically, everything converted to **your home currency** at daily rates and tracked against the trip budget. |
-| **Import** | Paste a planning conversation (Claude / ChatGPT / any language, Hebrew included) and the LLM extracts destinations, dates, places, budget and todos into a new trip. Nothing is invented. |
-| **BYO LLM** | Anthropic, OpenAI, Google Gemini or OpenRouter. Keys are per-user, stored only in the app's SQLite DB on your server, and used server-side. |
+| **Plan, not suggestions** | Your configured LLM arranges *only the places you added* into a detailed daily guide: directions between stops, queue-avoidance tips, meals, transit, rest blocks, and a per-day **alarm suggestion** ("Alarm 06:20 — be at Fushimi Inari by 07:15, before the coaches"). |
+| **A review of the day you're looking at** | Each day gets its own read — how full it is, what the order costs you in travel, whether the morning works — capped at three points, and cached against a fingerprint of the day so it can tell you when it's describing a day you've since changed. The trip-wide review sits underneath it, folded away. |
+| **Build it by hand too** | The plan isn't take-it-or-leave-it: edit mode lets you drag places onto a day, reorder stops, retime the day around them, move a day to another date, and add days the generator never made. Hand-built plans get reviewed the same way. |
+| **A chat per day** | Ask for a change to one day and it proposes a rewrite you accept or discard. It cannot invent a place: if it needs somewhere new it may only reply with search queries, which the server runs against Google Places — the model picks the search, Google picks the places, and the server rebuilds every field from its own record. |
+| **Multi-city trips** | A trip is an ordered list of legs (city + date range). One-way, round-trip and multi-city all work, and each leg carries how you get around that city. |
+| **Money** | Log expenses in any currency (trip-local ones suggested first), booking costs included automatically, everything converted to **your home currency** and tracked against the budget — with the list grouped into one card per day. |
+| **Import** | Paste a planning conversation (Claude / ChatGPT / any language, Hebrew included) and the LLM extracts destinations, dates, places, budget and todos. Paste a Google Maps list link and the places come in with your own notes attached. Nothing is invented. |
+| **BYO LLM** | Anthropic, OpenAI, Google Gemini or OpenRouter. Keys are per-user, stored only in the app's SQLite DB on your server, and used server-side. Profile tracks token spend against a monthly budget you set. |
 | **Multi-user & rooms** | The first account created becomes the admin; anyone else can sign up but needs admin approval. Each user brings their own LLM key/budget/prompt. **Rooms** hold one or more trips shared with the people you invite — invite someone to a room and they get access to everything in it. |
+
+### The day
+
+The day strip pins to the top as you scroll, the map draws the day's stops in order, and
+every stop carries what the model actually knows about it — how long to give it, what to
+skip, which entrance. The alarm line is the one the advisor argues for; the transport chip
+states the assumption the timings rest on, because an estimate you can't see the
+assumption behind is worthless.
+
+### Trip at a glance
+
+![Trip overview with the boarding pass and legs](docs/screenshots/overview-desktop.png)
+
+Legs are drag-to-reorder, and the boarding pass counts down to the first flight.
 
 ### Places with photos, map, bookings
 
 Places are collected from an interactive map (Google Maps with English labels + place
-photos when a key is set; Leaflet/OpenStreetMap otherwise). Bookings get one-click
-Booking.com / Airbnb searches pre-filled with each city and your dates.
+photos when a key is set; Leaflet/OpenStreetMap otherwise), from a text search, or from a
+Google Maps list you already made. Each place carries its city, category, priority, how
+long you want there, and a note — yours or the one that came with the list, marked for
+which.
 
 Place photos are downloaded from Google once and cached to disk (inside the same data
 volume as the database) — repeat views are served locally instead of re-billing the
 Places Photo API.
 
-![Place cards with photos](docs/screenshots/places-desktop.png)
+Bookings get one-click Google Flights / Skyscanner / Expedia and Booking.com / Airbnb /
+Agoda searches, pre-filled with each city and your leg dates.
+
+![Bookings with pre-filled provider searches](docs/screenshots/bookings-desktop.png)
 
 ### Expense tracking in your home currency
 
-![Expenses converted to home currency](docs/screenshots/expenses-desktop.png)
+![Expense summary by category and city](docs/screenshots/expenses-desktop.png)
+
+Every expense is converted at the day's rate, split by category and by city, and counted
+against the budget. The list underneath is one card per day of the trip — the day's
+number, its date, what it came to, and a bar of where the money went:
+
+![Expenses grouped into one card per day](docs/screenshots/expenses-days-desktop.png)
 
 ### Mobile-first PWA
 
 Installable on iOS/Android (Add to Home Screen). Drawer navigation with a
-`trip › page` breadcrumb top bar.
+`trip › page` breadcrumb top bar, and tabs that size themselves against the column they
+actually have rather than the window — the day and the expense cards hold down to 320px.
 
-<img src="docs/screenshots/mobile-overview.png" width="300" alt="Mobile view">
+<p>
+  <img src="docs/screenshots/mobile-plan.png" width="290" alt="The day on a phone">
+  <img src="docs/screenshots/mobile-expenses.png" width="290" alt="Expenses by day on a phone">
+</p>
 
 ### Plan lifecycle
 
@@ -92,7 +125,7 @@ Installable on iOS/Android (Add to Home Screen). Drawer navigation with a
 3. Optionally add a Google Maps key (env var or **Settings**, admin-only) for Google
    tiles + photos — this is shared across every user on the server.
 4. Create a trip (or **Import** one from a planning conversation), add legs in
-   **Overview**, add places from the **Map**/**Places** tab, then **Plan → Generate**.
+   **Overview**, add places from the **Places** tab, then **Plan → Generate**.
 5. Sharing a trip with someone else? Open **Rooms**, create a room (or use your default
    personal one), invite them by email, and create/move trips into it — every member of
    a room can see and edit every trip inside it, using their own LLM key.
@@ -131,8 +164,10 @@ mkdir -p ~/docker/tripplanner   # or add the tripplanner service to an existing 
 # (run it as a service: ./svc.sh install && ./svc.sh start)
 ```
 
-If you'd rather not run a runner, `docker compose pull && docker compose up -d` via
-ssh/cron or [Watchtower](https://containrrr.dev/watchtower/) works just as well.
+The deploy job is pinned to that runner, so with the box offline it queues rather than
+failing. `docker compose pull tripplanner && docker compose up -d tripplanner` on the
+server does the same thing by hand, and
+[Watchtower](https://containrrr.dev/watchtower/) or ssh/cron works just as well.
 
 ## Local development
 
@@ -153,7 +188,9 @@ Dockerfile  multi-stage: builds frontend, compiles backend, single runtime image
 ```
 
 The backend proxies all LLM calls server-side (`/api/trips/:id/generate-plan`,
-`/api/trips/:id/advise`, `/api/import/conversation`), so API keys never reach the
-browser — `GET /api/auth/me` returns only a masked fingerprint of your key. Sessions are
-plain server-side tokens in an httpOnly cookie (no JWT, no third-party auth). FX rates
-come from a free daily-rates API, cached server-side for 12 h.
+`/api/trips/:id/advise`, `/api/trips/:id/plan/day-advice`, `/api/trips/:id/plan/chat`,
+`/api/import/conversation`), so API keys never reach the browser — `GET /api/auth/me`
+returns only a masked fingerprint of your key. Plan generation runs as a detached job and
+streams its result back over SSE, so a slow model can't time out the browser's request.
+Sessions are plain server-side tokens in an httpOnly cookie (no JWT, no third-party auth).
+FX rates come from a free daily-rates API, cached server-side for 12 h.
