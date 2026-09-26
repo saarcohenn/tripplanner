@@ -8,7 +8,7 @@ import {
   planPrompt, advisorPrompt, dayAdvicePrompt, dayChatPrompt, importPrompt, insightPrompt, mergePrompt,
   DEFAULT_PLAN_SYSTEM_PROMPT, TripBundle,
 } from "./prompts.js";
-import { requireUser, requireAdmin, safeUser } from "./auth.js";
+import { requireUser, requireAdmin, safeUser, hashPassword, parseSidCookie } from "./auth.js";
 import { assertTripAccess, assertTripWrite, ensurePersonalRoom, roomIdsForUser } from "./rooms.js";
 import { fetchSharedList } from "./gmapsList.js";
 import { sanitizeProposal, searchQueries, type Candidate } from "./dayChat.js";
@@ -87,6 +87,32 @@ api.post("/admin/users/:id/role", requireAdmin, wrap((req, res) => {
   }
   db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
   res.json({ ok: true });
+}));
+
+/**
+ * Set someone else's password.
+ *
+ * There is no self-service change and no email reset in this app, so an admin is the only way
+ * back in for an account whose password is gone — which is also why this ends that account's
+ * sessions: once it has been handed a new password, the devices still holding the old one
+ * should not stay signed in. The admin doing it keeps their own session when they reset
+ * themselves; logging yourself out of the tab you are working in helps nobody.
+ */
+api.post("/admin/users/:id/password", requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  const password = String(req.body.password ?? "");
+  if (password.length < 8) {
+    throw Object.assign(new Error("Password must be at least 8 characters"), { status: 400 });
+  }
+  const target = db.prepare("SELECT id FROM users WHERE id = ?").get(id) as { id: number } | undefined;
+  if (!target) throw Object.assign(new Error("User not found"), { status: 404 });
+
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(password), id);
+  const keep = req.user.id === id ? parseSidCookie(req) : null;
+  const { changes } = keep
+    ? db.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?").run(id, keep)
+    : db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+  res.json({ ok: true, sessions_ended: changes });
 }));
 
 // Approved-user lookup for the room-invite autocomplete (mirrors the Places name-search UX).

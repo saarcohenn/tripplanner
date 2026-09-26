@@ -11,7 +11,10 @@ export default function AuthGate({ onLogin }: { onLogin: (user: User) => void })
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit() {
+  async function submit(e: React.FormEvent) {
+    // The submit event itself is what a password manager watches, so it has to happen — the
+    // default navigation is all that's cancelled here.
+    e.preventDefault();
     setError(null);
     setNotice(null);
     if (!email || !password) return setError("Email and password are required");
@@ -32,31 +35,59 @@ export default function AuthGate({ onLogin }: { onLogin: (user: User) => void })
     }
   }
 
+  function switchTo(next: "login" | "signup") {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+  }
+
   return (
     <div className="pad auth-screen">
       <h1>TripPlanner</h1>
       <h2>{mode === "login" ? "Log in" : "Sign up"}</h2>
-      {mode === "signup" && (
-        <label className="block">Display name
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      {/*
+        A real <form> with a submit button and named, autocomplete-tagged fields. iOS Safari
+        only offers to save a password — and only fills one back in, including in an installed
+        PWA — when it sees a form submitted with a field that says it is the username and one
+        that says it is the password. Buttons that aren't the submit say so explicitly:
+        inside a form a bare <button> is a submit button.
+      */}
+      <form onSubmit={submit}>
+        {mode === "signup" && (
+          <label className="block">Display name
+            <input
+              name="name" autoComplete="name" dir="auto"
+              value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </label>
+        )}
+        <label className="block">Email
+          <input
+            type="email" name="email" autoComplete="username" inputMode="email"
+            autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            value={email} onChange={(e) => setEmail(e.target.value)}
+          />
         </label>
-      )}
-      <label className="block">Email
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      </label>
-      <label className="block">Password
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      </label>
-      {error && <div className="alert">{error}</div>}
-      {notice && <p className="hint">{notice}</p>}
-      <button className="primary" onClick={submit} disabled={busy}>
-        {busy ? "…" : mode === "login" ? "Log in" : "Sign up"}
-      </button>
+        <label className="block">Password
+          <input
+            type="password" name="password"
+            // Asking for the saved one on the way in, and offering to save a new one on the
+            // way up: the same attribute says both, depending on which it is.
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            value={password} onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        {error && <div className="alert">{error}</div>}
+        {notice && <p className="hint">{notice}</p>}
+        <button className="primary" type="submit" disabled={busy}>
+          {busy ? "…" : mode === "login" ? "Log in" : "Sign up"}
+        </button>
+      </form>
       <p className="hint">
         {mode === "login" ? (
-          <>No account? <button className="inline" onClick={() => { setMode("signup"); setError(null); setNotice(null); }}>Sign up</button></>
+          <>No account? <button type="button" className="inline" onClick={() => switchTo("signup")}>Sign up</button></>
         ) : (
-          <>Already have an account? <button className="inline" onClick={() => { setMode("login"); setError(null); setNotice(null); }}>Log in</button></>
+          <>Already have an account? <button type="button" className="inline" onClick={() => switchTo("login")}>Log in</button></>
         )}
       </p>
     </div>
