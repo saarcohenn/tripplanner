@@ -9,7 +9,8 @@ export default function SetupAdminForm({ onDone }: { onDone: (user: User) => voi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit() {
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
     if (!email || !password) return setError("Email and password are required");
     setBusy(true);
@@ -31,17 +32,33 @@ export default function SetupAdminForm({ onDone }: { onDone: (user: User) => voi
         This is a one-time setup — the first account on this server becomes the admin. Once
         created, other people can sign up but will need your approval to get in.
       </p>
-      <label className="block">Display name
-        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-      </label>
-      <label className="block">Email
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      </label>
-      <label className="block">Password
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      </label>
-      {error && <div className="alert">{error}</div>}
-      <button className="primary" onClick={submit} disabled={busy}>{busy ? "Creating…" : "Create admin account"}</button>
+      {/* Same shape as the login form, so the browser's password manager offers to keep the
+          one password that can never be reset by anyone else. */}
+      <form onSubmit={submit}>
+        <label className="block">Display name
+          <input
+            name="name" autoComplete="name" dir="auto"
+            value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+          />
+        </label>
+        <label className="block">Email
+          <input
+            type="email" name="email" autoComplete="username" inputMode="email"
+            autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            value={email} onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <label className="block">Password
+          <input
+            type="password" name="password" autoComplete="new-password"
+            value={password} onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        {error && <div className="alert">{error}</div>}
+        <button className="primary" type="submit" disabled={busy}>
+          {busy ? "Creating…" : "Create admin account"}
+        </button>
+      </form>
     </div>
   );
 }
