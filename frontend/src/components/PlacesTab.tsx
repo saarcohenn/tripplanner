@@ -6,6 +6,7 @@ import {
 import { api, gmapsLink } from "../api";
 import type { Place, TripDetail } from "../types";
 import ConfirmPlanDialog, { PlanGateChoice } from "./ConfirmPlanDialog";
+import FilterIcon from "./FilterIcon";
 import TripMap, { CATEGORY_COLORS } from "./TripMap";
 
 const CATEGORIES = ["sight", "attractions", "landmarks", "food", "nature", "shopping", "nightlife", "other"];
@@ -29,16 +30,6 @@ type ImportCandidate = {
   /** Your own note on the pin. Only the share-link route has these — Takeout drops them. */
   note?: string;
 };
-
-function FilterIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="4" y1="6" x2="20" y2="6" /><circle cx="16" cy="6" r="2" fill="currentColor" stroke="none" />
-      <line x1="4" y1="12" x2="20" y2="12" /><circle cx="9" cy="12" r="2" fill="currentColor" stroke="none" />
-      <line x1="4" y1="18" x2="20" y2="18" /><circle cx="14" cy="18" r="2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
 
 export default function PlacesTab({ detail, refresh, gmapsKey, llmReady, generatePlan, theme }: {
   detail: TripDetail;

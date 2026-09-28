@@ -613,13 +613,13 @@ button:active:not(:disabled) { transform: translateY(0); transition-duration: 0.
 button:disabled { opacity: 0.45; cursor: default; }
 /* Chrome-less buttons (nav rows, card headers, icon affordances) are part of a surface
    rather than sitting on one — they tint on hover instead of lifting off the page. */
-.tab, .trip-name, .trip-del, .drawer-item, .drawer-back, .bcard-head, .leg-summary,
+.tab, .trip-name, .trip-del, .drawer-item, .drawer-back, .bcard-head, .day-exp-head, .leg-summary,
 .leg-drag-handle, .notif-bell, .theme-toggle, .sidebar-logout, .hamburger,
 .sidebar-app-nav button, .chip-toggle {
   transform: none;
 }
 .tab:hover:not(:disabled), .trip-name:hover:not(:disabled), .trip-del:hover:not(:disabled),
-.drawer-item:hover:not(:disabled), .drawer-back:hover:not(:disabled), .bcard-head:hover:not(:disabled),
+.drawer-item:hover:not(:disabled), .drawer-back:hover:not(:disabled), .bcard-head:hover:not(:disabled), .day-exp-head:hover:not(:disabled),
 .leg-summary:hover:not(:disabled), .leg-drag-handle:hover:not(:disabled), .notif-bell:hover:not(:disabled),
 .theme-toggle:hover:not(:disabled), .sidebar-logout:hover:not(:disabled),
 .hamburger:hover:not(:disabled), .sidebar-app-nav button:hover:not(:disabled),
@@ -1762,7 +1762,15 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
   box-shadow: var(--shadow); overflow: hidden;
   animation: rise 0.3s var(--ease-out) both;
 }
-.day-exp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 11px 14px 9px; }
+/* The whole header is the fold's hit target, so it is a button — stripped of the global
+   button chrome the way .bcard-head is, and full width so the tap lands anywhere on the row. */
+.day-exp-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 11px 14px 9px;
+  width: 100%; text-align: left; cursor: pointer; color: var(--text); font-size: 13px;
+  background: none; border: none; border-radius: 0; box-shadow: none;
+}
+.day-exp-head:hover:not(:disabled) { background: var(--card-tint); border: none; box-shadow: none; }
+.day-exp-chev { color: var(--muted); display: inline-flex; align-self: center; margin-right: -2px; }
 /* Day number first and always the same width, so the column of them reads as a count of
    days rather than as text that happens to start with "Day". */
 .day-exp-no {
@@ -1810,6 +1818,20 @@ input.subtle:hover, input.subtle:focus, select.subtle:hover, select.subtle:focus
 .catbar-seg:first-child { border-radius: 999px 0 0 999px; }
 .catbar-seg:last-child { border-radius: 0 999px 999px 0; }
 .catbar-seg:only-child { border-radius: 999px; }
+
+/* ---------- the expense list's own controls ---------- */
+/* Directly above the list rather than up by the heading: on a phone the add form is most of a
+   screen, and controls for a list belong next to the list they act on. */
+.exp-toolbar { margin: 4px 0 2px; }
+.exp-toolbar .hint { margin: 0; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.filter-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+  min-width: 58px;
+}
+/* The column layout would otherwise stretch it the width of the bar, which reads as the
+   primary action here — it is the way out of a filter, not the point of one. */
+.filter-bar > button.small { align-self: flex-start; }
 
 /* ---------- donut charts ---------- */
 /* Chart beside its legend once there's room, stacked on a phone. */
