@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   ChevronDown, ChevronRight, CreditCard, Globe, Hotel, Plane, Plus, ShoppingBag, Ticket,
-  TrainFront, UtensilsCrossed,
+  TrainFront, UtensilsCrossed, X,
 } from "lucide-react";
 import { api } from "../api";
 import type { Expense, TripDetail } from "../types";
 import CategoryBar, { type Segment } from "./CategoryBar";
+import FilterIcon from "./FilterIcon";
 import CurrencySelect from "./CurrencySelect";
 import { DatePicker } from "./DateRangePicker";
 import DonutChart, { type Slice } from "./DonutChart";
@@ -35,6 +36,31 @@ const ROLLUP = "other";
  */
 const CAT_COLOR: Record<string, string> = Object.fromEntries(CATS.map((c, i) => [c, SERIES[i]]));
 const CAT_RANK = new Map<string, number>(CATS.map((c, i) => [c as string, i]));
+
+type Order = "newest" | "oldest";
+type View = { order: Order; collapsed: string[] };
+
+/**
+ * How this device likes to look at this trip's expenses: which way the days run and which of
+ * them are folded away. It lives in the browser rather than the trip because it is about the
+ * screen in your hand — the phone you log lunch on wants today at the top and the other three
+ * weeks out of the way, and it should still look like that when you come back to the tab.
+ */
+const VIEW_KEY = (tripId: number) => `tripplanner.expenses.view.${tripId}`;
+
+function loadView(tripId: number): Partial<View> {
+  try {
+    return JSON.parse(localStorage.getItem(VIEW_KEY(tripId)) || "{}") as Partial<View>;
+  } catch {
+    return {}; // private mode, or something else's key — the defaults are fine
+  }
+}
+
+function saveView(tripId: number, view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY(tripId), JSON.stringify(view));
+  } catch { /* storage full or blocked: the view just doesn't outlive the tab */ }
+}
 
 /**
  * Slices for one ring.
@@ -95,6 +121,16 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
   });
   const [expanded, setExpanded] = useState<number | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
+
+  // Newest day first by default: on a trip the day you are adding to is today's.
+  const [order, setOrder] = useState<Order>(() => loadView(trip.id).order || "newest");
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(loadView(trip.id).collapsed || []));
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Filters are deliberately not remembered — a filter you forgot you set reads as missing data.
+  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = useState<Set<number | null>>(new Set());
+
+  useEffect(() => { saveView(trip.id, { order, collapsed: [...collapsed] }); }, [trip.id, order, collapsed]);
 
   const home = homeCurrency || trip.currency || "USD";
   useEffect(() => {
@@ -192,13 +228,24 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
     return date < firstDay ? "Before" : lastDay && date > lastDay ? "After" : "";
   }
 
-  type DayGroup = { date: string | null; items: Expense[]; total: number; byCat: Record<string, number> };
-  const undated: DayGroup = { date: null, items: [], total: 0, byCat: {} };
+  const anyFilterActive = catFilter.size > 0 || cityFilter.size > 0;
+  function matchesFilters(e: Expense) {
+    if (catFilter.size > 0 && !catFilter.has(CAT_RANK.has(e.category) ? e.category : ROLLUP)) return false;
+    if (cityFilter.size > 0 && !cityFilter.has(e.leg_id)) return false;
+    return true;
+  }
+  const shown = anyFilterActive ? expenses.filter(matchesFilters) : expenses;
+  const shownTotal = shown.reduce((s, e) => s + conv(e.amount, e.currency), 0);
+
+  type DayGroup = { key: string; date: string | null; items: Expense[]; total: number; byCat: Record<string, number> };
+  const undated: DayGroup = { key: "undated", date: null, items: [], total: 0, byCat: {} };
   const byDay = new Map<string, DayGroup>();
-  for (const e of expenses) {
+  // The cards describe what's in them: with a filter on, a day's total and its bar are the
+  // total and the mix of the rows you can actually see, and a day with nothing left drops out.
+  for (const e of shown) {
     let group = e.date ? byDay.get(e.date) : undated;
     if (!group) {
-      group = { date: e.date, items: [], total: 0, byCat: {} };
+      group = { key: e.date as string, date: e.date, items: [], total: 0, byCat: {} };
       byDay.set(e.date as string, group);
     }
     group.items.push(e);
@@ -209,8 +256,38 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
     const cat = CAT_RANK.has(e.category) ? e.category : ROLLUP;
     group.byCat[cat] = (group.byCat[cat] || 0) + value;
   }
-  const days = [...byDay.values()].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  if (undated.items.length) days.push(undated);
+  const dated = [...byDay.values()].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  if (order === "newest") dated.reverse();
+  // The undated stay at the end whichever way the dated ones run: they aren't late or early,
+  // they're unfinished, and the end is where you go to finish them.
+  const days = undated.items.length ? [...dated, undated] : dated;
+
+  const allCollapsed = days.length > 0 && days.every((g) => collapsed.has(g.key));
+  function toggleDay(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  function toggleAll() {
+    // Only the days on screen move — a filtered-out day keeps whatever state it had.
+    const keys = days.map((g) => g.key);
+    setCollapsed((prev) =>
+      allCollapsed
+        ? new Set([...prev].filter((k) => !keys.includes(k)))
+        : new Set([...prev, ...keys])
+    );
+  }
+  function toggleIn<T>(set: Set<T>, value: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    return next;
+  }
+  function clearFilters() {
+    setCatFilter(new Set());
+    setCityFilter(new Set());
+  }
 
   /** One segment per category the day actually had, in the categories' own fixed order. */
   function segmentsFor(g: DayGroup): Segment[] {
@@ -353,24 +430,113 @@ export default function ExpensesTab({ detail, refresh, homeCurrency }: {
         <button className="fab-add" onClick={add} aria-label="Add expense" title="Add expense"><Plus size={18} /></button>
       </div>
 
+      {expenses.length > 0 && (
+        <div className="exp-toolbar">
+          <div className="row spread">
+            <span className="hint" dir="auto">
+              {anyFilterActive
+                ? `Showing ${shown.length} of ${expenses.length} · ${fmtMoney(shownTotal, home)}`
+                : `${expenses.length} ${expenses.length === 1 ? "expense" : "expenses"} · ${fmtMoney(shownTotal, home)}`}
+            </span>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="small" onClick={toggleAll} disabled={days.length === 0}>
+                {allCollapsed ? "Expand all" : "Collapse all"}
+              </button>
+              <button
+                className={`icon-btn${filtersOpen ? " active" : ""}`} title="Filter and sort"
+                aria-label="Filter and sort" aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
+                <FilterIcon />
+                {anyFilterActive && <span className="badge-dot" />}
+              </button>
+            </div>
+          </div>
+
+          {filtersOpen && (
+            <div className="filter-bar">
+              <div className="filter-row">
+                <span className="filter-label">Order</span>
+                <div className="filter-chips">
+                  {(["newest", "oldest"] as Order[]).map((o) => (
+                    <button key={o} className={`chip-toggle${order === o ? " active" : ""}`} onClick={() => setOrder(o)}>
+                      {o === "newest" ? "Newest first" : "Oldest first"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="filter-row">
+                <span className="filter-label">Category</span>
+                <div className="filter-chips">
+                  {CATS.map((c) => (
+                    <button
+                      key={c} className={`chip-toggle${catFilter.has(c) ? " active" : ""}`}
+                      onClick={() => setCatFilter((prev) => toggleIn(prev, c as string))}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {legs.length > 0 && (
+                <div className="filter-row">
+                  <span className="filter-label">City</span>
+                  <div className="filter-chips">
+                    {legs.map((l) => (
+                      <button
+                        key={l.id} dir="auto" className={`chip-toggle${cityFilter.has(l.id) ? " active" : ""}`}
+                        onClick={() => setCityFilter((prev) => toggleIn(prev, l.id as number | null))}
+                      >
+                        {l.city}
+                      </button>
+                    ))}
+                    <button
+                      className={`chip-toggle${cityFilter.has(null) ? " active" : ""}`}
+                      onClick={() => setCityFilter((prev) => toggleIn(prev, null as number | null))}
+                    >
+                      <Globe size={12} /> Trip-wide
+                    </button>
+                  </div>
+                </div>
+              )}
+              {anyFilterActive && (
+                <button className="small btn-icon" onClick={clearFilters}>Clear filters <X size={12} /></button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="day-exp-list">
         {days.map((g) => {
           const badge = g.date ? dayBadge(g.date) : "No date";
+          const open = !collapsed.has(g.key);
           return (
-            <section className="day-exp" key={g.date || "undated"}>
-              <header className="day-exp-head">
+            <section className="day-exp" key={g.key}>
+              {/* The header is the fold: the day's number, date, total and mix stay on screen,
+                  and only its rows go away — that is the view you want while scrolling a trip. */}
+              <button
+                className="day-exp-head" aria-expanded={open}
+                onClick={() => toggleDay(g.key)}
+              >
+                <span className="day-exp-chev">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
                 {badge && <span className={`day-exp-no${g.date ? "" : " undated"}`}>{badge}</span>}
                 <span className="day-exp-date">
                   {g.date ? fmtDayLabel(g.date) : `${g.items.length} ${g.items.length === 1 ? "expense" : "expenses"}`}
                 </span>
                 <span className="day-exp-total">{fmtMoney(g.total, home)}</span>
-              </header>
+              </button>
               <CategoryBar segments={segmentsFor(g)} format={(v) => fmtMoney(v, home)} />
-              <div className="day-exp-rows">{g.items.map(expenseCard)}</div>
+              {open && <div className="day-exp-rows">{g.items.map(expenseCard)}</div>}
             </section>
           );
         })}
       </div>
+      {expenses.length > 0 && days.length === 0 && (
+        <p className="hint">
+          Nothing matches these filters. <button className="inline" onClick={clearFilters}>Clear them</button>
+        </p>
+      )}
       {expenses.length === 0 && <p className="hint">No expenses recorded yet. Booking costs from the Bookings tab are included in the summary automatically.</p>}
       {expenses.length > 0 && (
         <p className="hint">
